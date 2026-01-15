@@ -54,7 +54,8 @@
   services.openssh = {
     enable = true;
     settings = {
-      PermitRootLogin = "no";
+      # Allow root login with SSH keys only (required for Nix distributed builds)
+      PermitRootLogin = "prohibit-password";
       PasswordAuthentication = false;
     };
   };
