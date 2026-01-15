@@ -199,6 +199,18 @@ cd ~/sysadmin/odroid-c4
 nix build .#node1-sdImage
 ```
 
+## Desktop Binary Cache
+
+The desktop runs `nix-serve` as a binary cache for the cluster.
+
+- **URL**: `http://192.168.4.25:5000`
+- **Auto-starts**: systemd user service with lingering
+- **Public key**: `desktop-cache:VKMDqj8ZMNSALD1+vnmLs/ZBtBU9RgzrOAUQYQbldak=`
+
+**Check status**: `ssh samuel@desktop "systemctl --user status nix-serve"`
+
+**If desktop IP changes**: Update `substituters` in `configuration.nix`.
+
 ## Distributed Builds
 
 The cluster supports distributed Nix builds across all 7 nodes (28 cores total).
@@ -210,6 +222,7 @@ sudo nix build nixpkgs#package -j0
 ```
 
 **Key infrastructure**:
+- Desktop binary cache as primary substituter
 - Root SSH enabled (key-based only) for nix-daemon inter-node access
 - Shared signing key at `/etc/nix/cache-priv-key.pem`
 - Build machines configured in `/etc/nix/machines`

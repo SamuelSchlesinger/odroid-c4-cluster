@@ -474,6 +474,23 @@ sudo nix-env --list-generations -p /nix/var/nix/profiles/system
 sudo nixos-rebuild switch --rollback
 ```
 
+### Desktop Binary Cache
+
+The desktop runs a binary cache server (nix-serve) that cluster nodes use as a primary substituter. This speeds up builds by serving packages that exist in the desktop's Nix store.
+
+**Cache details**:
+- URL: `http://192.168.4.25:5000` (desktop IP - consider DHCP reservation)
+- Runs automatically via systemd user service with lingering enabled
+- Port 5000/tcp opened in UFW firewall
+
+**Verify cache is running** (on desktop):
+```bash
+systemctl --user status nix-serve
+curl http://localhost:5000/nix-cache-info
+```
+
+**If desktop IP changes**: Update `substituters` in `configuration.nix` with new IP.
+
 ### Distributed Builds
 
 The cluster is configured for Nix distributed builds, allowing any node to offload builds to all other nodes (28 cores total).
