@@ -45,12 +45,7 @@
   # Hardware settings
   hardware = {
     enableRedistributableFirmware = true;
-
-    # Device tree for Odroid C4
-    deviceTree = {
-      enable = true;
-      filter = "meson-sm1-odroid-c4.dtb";
-    };
+    # Device tree included in kernel, no filtering needed
   };
 
   # CPU frequency scaling
