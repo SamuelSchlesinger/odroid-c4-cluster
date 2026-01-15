@@ -10,8 +10,8 @@
     loader.grub.enable = false;
     loader.generic-extlinux-compatible.enable = true;
 
-    # Use mainline kernel - good S905X3 support
-    kernelPackages = pkgs.linuxPackages_latest;
+    # Use LTS kernel for stability
+    kernelPackages = pkgs.linuxPackages_6_6;
 
     # Serial console for Amlogic SoC
     kernelParams = [ "console=ttyAML0,115200n8" ];
