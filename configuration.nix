@@ -33,6 +33,14 @@
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOv/btyrQGVnaGQCLEdkOGKtGgSN2TmdFMgDyst4tpaz samuelschlesinger@Samuels-MacBook-Pro.local"
       # Desktop
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMXkHnuxSPuZfVl1vMa6h4H230X3s1f3ch4oZGKTz91f samuel@desktop"
+      # Cluster inter-node keys
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGJMIjIb1qAgKWU086/kUyIBKd9XyjVWbF4hynKEBM0N node1@odroid-cluster"
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGJxhsHA7yi4xjIWU/02GVgf2+rgTV42sBCLUQQW6weK node2@odroid-cluster"
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL/+JcifKBcX5BpYUA4djZYGULZf1KhCsMz6k2khtC+D node3@odroid-cluster"
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJtJ/2a3fUEpN8sb/cwt3YCJiW2maoKT09J7g7XGTFVk node4@odroid-cluster"
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDHXcKemfTwa6pi3DCF4cyvokTep9vkBi41TP9I8k92W node5@odroid-cluster"
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDC0uDTQ1qhaxtmUa/MH/EuTzdTEDqvjHvkdX5lQB+zV node6@odroid-cluster"
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINMWheVDO8zSLoF3CCwM9YwsDYhjvZlMW9jwPFKsMLrZ node7@odroid-cluster"
     ];
     # No password set - SSH key only
     # For emergency console access, set one after first boot:
