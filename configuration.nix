@@ -86,10 +86,16 @@
     settings = {
       experimental-features = [ "nix-command" "flakes" ];
       trusted-users = [ "root" "admin" ];
-      # Trust builds signed by our cluster
+      # Binary cache substituters (desktop cache first, then official)
+      substituters = [
+        "http://desktop.local:5000"
+        "https://cache.nixos.org"
+      ];
+      # Trust builds signed by our caches
       trusted-public-keys = [
         "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
         "odroid-cluster:h/8zXapPMFf2htwIuN5Pgu5e59wubGIJjbAeO+5GPK8="
+        "desktop-cache:VKMDqj8ZMNSALD1+vnmLs/ZBtBU9RgzrOAUQYQbldak="
       ];
       # Sign all builds with our cluster key
       secret-key-files = "/etc/nix/cache-priv-key.pem";
