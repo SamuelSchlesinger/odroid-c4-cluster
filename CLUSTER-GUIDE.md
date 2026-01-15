@@ -325,7 +325,7 @@ environment.systemPackages = with pkgs; [
 
 | Setting | Value | Notes |
 |---------|-------|-------|
-| SSH root login | Disabled | `PermitRootLogin = "no"` |
+| SSH root login | Keys only | `PermitRootLogin = "prohibit-password"` (for distributed builds) |
 | Password auth | Disabled | SSH keys only |
 | Firewall | Enabled | Only port 22 open |
 | Sudo | Passwordless | For `admin` user via `wheel` group |
@@ -341,7 +341,8 @@ odroid-c4-cluster/
 ├── configuration.nix         # Shared NixOS config for all nodes
 ├── hardware-configuration.nix # Odroid C4 hardware settings
 ├── flash-with-towboot.sh     # SD card flashing script (macOS)
-├── distribute-cluster-keys.sh # SSH key distribution script
+├── distribute-cluster-keys.sh # Admin SSH key distribution script
+├── setup-distributed-builds.sh # Root SSH + cache key distribution
 ├── README.md                 # Quick start guide
 ├── CLUSTER-GUIDE.md          # This file
 ├── CLAUDE.md                 # Claude Code operational guide
@@ -471,6 +472,38 @@ sudo nix-env --list-generations -p /nix/var/nix/profiles/system
 
 # Rollback to previous
 sudo nixos-rebuild switch --rollback
+```
+
+### Distributed Builds
+
+The cluster is configured for Nix distributed builds, allowing any node to offload builds to all other nodes (28 cores total).
+
+**How it works**:
+- Each node has all 7 nodes listed as build machines
+- Root SSH keys allow the nix-daemon to connect between nodes
+- A shared signing key ensures nodes trust each other's builds
+
+**Using distributed builds**:
+
+```bash
+# Build using all cluster nodes (from any node)
+sudo nix build nixpkgs#package -j0
+
+# The -j0 flag tells Nix to use remote builders only
+# Without -j0, it will use local + remote builders
+```
+
+**Key files for distributed builds**:
+- `/etc/nix/machines` - List of remote build machines
+- `/etc/nix/cache-priv-key.pem` - Signing key for builds
+- `/root/.ssh/id_ed25519` - Root SSH key for inter-node access
+
+**Re-setup distributed builds** (if keys need redistribution):
+
+```bash
+# From MacBook
+./setup-distributed-builds.sh        # All nodes
+./setup-distributed-builds.sh 3      # Single node
 ```
 
 ---

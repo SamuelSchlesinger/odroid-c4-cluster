@@ -77,6 +77,8 @@ done
 | `flake.nix` | Node definitions, build outputs | Rarely |
 | `flake.lock` | Pinned nixpkgs version | Only when updating packages |
 | `hardware-configuration.nix` | Boot/hardware settings | Rarely |
+| `distribute-cluster-keys.sh` | Admin SSH key distribution | Rarely |
+| `setup-distributed-builds.sh` | Root SSH + cache key setup | Rarely |
 | `CLUSTER-GUIDE.md` | Comprehensive documentation | As needed |
 
 ## Common Operations
@@ -197,6 +199,40 @@ cd ~/sysadmin/odroid-c4
 nix build .#node1-sdImage
 ```
 
+## Distributed Builds
+
+The cluster supports distributed Nix builds across all 7 nodes (28 cores total).
+
+**From any cluster node**:
+```bash
+# Use -j0 to force remote building across the cluster
+sudo nix build nixpkgs#package -j0
+```
+
+**Key infrastructure**:
+- Root SSH enabled (key-based only) for nix-daemon inter-node access
+- Shared signing key at `/etc/nix/cache-priv-key.pem`
+- Build machines configured in `/etc/nix/machines`
+
+**Re-setup if needed**:
+```bash
+./setup-distributed-builds.sh    # Distributes root keys and signing keys
+```
+
+## Inter-Node SSH
+
+Nodes can SSH to each other directly:
+
+```bash
+# From node1
+ssh node2 hostname    # Uses ~/.ssh/config for easy access
+```
+
+**Key storage** (MacBook and desktop):
+- `~/.ssh/odroid-cluster/node{1-7}` - Per-node admin keys
+- `~/.ssh/odroid-cluster/root-cluster` - Root key for distributed builds
+- `~/.ssh/odroid-cluster/cache/` - Binary cache signing keys
+
 ## Cluster Specifications
 
 | Property | Value |
@@ -204,7 +240,7 @@ nix build .#node1-sdImage
 | Nodes | 7 × Odroid C4 |
 | CPU | 4× Cortex-A55 per node (28 cores total) |
 | RAM | 4GB per node (28GB total) |
-| OS | NixOS 24.11 |
+| OS | NixOS 25.05 |
 | Kernel | 6.6 LTS |
 | Network | Gigabit Ethernet, DHCP, mDNS |
 | SSH User | `admin` (passwordless sudo) |
