@@ -87,8 +87,9 @@
       experimental-features = [ "nix-command" "flakes" ];
       trusted-users = [ "root" "admin" ];
       # Binary cache substituters (desktop cache first, then official)
+      # Note: Using IP because nix-daemon doesn't resolve mDNS
       substituters = [
-        "http://desktop.local:5000"
+        "http://192.168.4.25:5000"
         "https://cache.nixos.org"
       ];
       # Trust builds signed by our caches
