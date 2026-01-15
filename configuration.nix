@@ -80,12 +80,33 @@
     wget
   ];
 
-  # Enable flakes
+  # Enable flakes and distributed builds
   nix = {
     settings = {
       experimental-features = [ "nix-command" "flakes" ];
       trusted-users = [ "root" "admin" ];
+      # Trust builds signed by our cluster
+      trusted-public-keys = [
+        "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
+        "odroid-cluster:h/8zXapPMFf2htwIuN5Pgu5e59wubGIJjbAeO+5GPK8="
+      ];
+      # Sign all builds with our cluster key
+      secret-key-files = "/etc/nix/cache-priv-key.pem";
     };
+
+    # Enable distributed builds across the cluster
+    distributedBuilds = true;
+
+    # All cluster nodes as build machines (4 cores each)
+    buildMachines = [
+      { hostName = "node1.local"; sshUser = "root"; sshKey = "/root/.ssh/id_ed25519"; system = "aarch64-linux"; maxJobs = 4; speedFactor = 1; supportedFeatures = [ "nixos-test" "big-parallel" ]; }
+      { hostName = "node2.local"; sshUser = "root"; sshKey = "/root/.ssh/id_ed25519"; system = "aarch64-linux"; maxJobs = 4; speedFactor = 1; supportedFeatures = [ "nixos-test" "big-parallel" ]; }
+      { hostName = "node3.local"; sshUser = "root"; sshKey = "/root/.ssh/id_ed25519"; system = "aarch64-linux"; maxJobs = 4; speedFactor = 1; supportedFeatures = [ "nixos-test" "big-parallel" ]; }
+      { hostName = "node4.local"; sshUser = "root"; sshKey = "/root/.ssh/id_ed25519"; system = "aarch64-linux"; maxJobs = 4; speedFactor = 1; supportedFeatures = [ "nixos-test" "big-parallel" ]; }
+      { hostName = "node5.local"; sshUser = "root"; sshKey = "/root/.ssh/id_ed25519"; system = "aarch64-linux"; maxJobs = 4; speedFactor = 1; supportedFeatures = [ "nixos-test" "big-parallel" ]; }
+      { hostName = "node6.local"; sshUser = "root"; sshKey = "/root/.ssh/id_ed25519"; system = "aarch64-linux"; maxJobs = 4; speedFactor = 1; supportedFeatures = [ "nixos-test" "big-parallel" ]; }
+      { hostName = "node7.local"; sshUser = "root"; sshKey = "/root/.ssh/id_ed25519"; system = "aarch64-linux"; maxJobs = 4; speedFactor = 1; supportedFeatures = [ "nixos-test" "big-parallel" ]; }
+    ];
   };
 
   # Automatic garbage collection
@@ -94,4 +115,10 @@
     dates = "weekly";
     options = "--delete-older-than 30d";
   };
+
+  # Enable root SSH for distributed builds (key-based only)
+  users.users.root.openssh.authorizedKeys.keys = [
+    # Cluster root key for distributed builds
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBNJtdWB67MZTwLn8dyyyPV4pvQAWpfUeZ3TwKLjCnXw root@odroid-cluster"
+  ];
 }
