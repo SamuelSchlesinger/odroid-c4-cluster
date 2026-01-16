@@ -15,10 +15,24 @@ This repository contains the **NixOS configuration for a 7-node Odroid C4 cluste
 | Check cluster health | See [Health Check](#health-check) below |
 | SSH to node | `ssh admin@node1.local` (or via jump host) |
 | Build image | On desktop: `nix build .#node1-sdImage` |
-| Deploy to node | `ssh admin@node1.local "sudo nixos-rebuild switch --flake 'git+ssh://git@github.com/SamuelSchlesinger/odroid-c4-cluster#node1'"` |
+| Deploy to node | `ssh admin@node1.local "sudo nixos-rebuild switch --flake 'git+ssh://git@github.com/SamuelSchlesinger/odroid-c4-cluster#node1' --refresh"` |
 | Deploy all nodes | See [Deploying to All Nodes](#deploying-to-all-nodes) |
 | Update packages | On desktop: `nix flake update && git add flake.lock && git commit && git push` |
 | Sync repo | `git pull origin main` / `git push origin main` |
+
+## Go-Links (Quick Access)
+
+Access cluster services via short URLs (requires Tailscale connection):
+
+| Link | Destination |
+|------|-------------|
+| `go/` | Index page with all links |
+| `go/grafana` | Grafana dashboards |
+| `go/prometheus` | Prometheus UI |
+| `go/prom` | Prometheus (short) |
+| `go/node1` - `go/node7` | Node metrics (node_exporter) |
+
+**Setup**: The go-links nginx proxy runs on the desktop. DNS resolution is via `/etc/hosts` on each client machine (`100.123.199.53 go` pointing to desktop's Tailscale IP).
 
 ## Network Access
 
@@ -70,11 +84,40 @@ for i in 1 2 3 4 5 6 7; do
 done
 ```
 
+## Monitoring Stack
+
+The cluster runs Prometheus + Grafana for monitoring:
+
+| Service | Location | Port | Purpose |
+|---------|----------|------|---------|
+| Prometheus | node1 | 9090 | Metrics aggregation, queries |
+| Grafana | node1 | 3000 | Dashboards, visualization |
+| node_exporter | all nodes | 9100 | System metrics (CPU, RAM, disk, network) |
+
+**Access**: Use `go/grafana` or `http://node1.local:3000` (admin/admin).
+
+**Key files**:
+- `monitoring.nix` - Prometheus + Grafana config (node1 only)
+- `configuration.nix` - node_exporter config (all nodes)
+
+**Useful Prometheus queries**:
+```promql
+# CPU usage per node
+100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+
+# Memory available
+node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100
+
+# Disk space remaining
+node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} * 100
+```
+
 ## Key Files
 
 | File | Purpose | Edit Frequency |
 |------|---------|----------------|
 | `configuration.nix` | All system settings (users, packages, services) | Often |
+| `monitoring.nix` | Prometheus + Grafana for node1 | Rarely |
 | `flake.nix` | Node definitions, build outputs | Rarely |
 | `flake.lock` | Pinned nixpkgs version | Only when updating packages |
 | `hardware-configuration.nix` | Boot/hardware settings | Rarely |

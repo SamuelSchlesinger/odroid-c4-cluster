@@ -291,10 +291,13 @@ users.users.root.openssh.authorizedKeys.keys = [
 
 ### Key Services
 
-| Service | Purpose | Port |
-|---------|---------|------|
-| OpenSSH | Remote access | 22 |
-| Avahi | mDNS discovery | 5353/udp |
+| Service | Purpose | Port | Location |
+|---------|---------|------|----------|
+| OpenSSH | Remote access | 22 | All nodes |
+| Avahi | mDNS discovery | 5353/udp | All nodes |
+| node_exporter | System metrics | 9100 | All nodes |
+| Prometheus | Metrics aggregation | 9090 | node1 |
+| Grafana | Dashboards | 3000 | node1 |
 
 ### Installed Packages
 
