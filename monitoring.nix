@@ -7,6 +7,10 @@
     enable = true;
     port = 9090;
 
+    globalConfig = {
+      scrape_interval = "60s";
+    };
+
     scrapeConfigs = [
       {
         job_name = "cluster";
