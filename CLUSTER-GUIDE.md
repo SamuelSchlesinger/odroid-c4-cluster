@@ -11,6 +11,7 @@ This document provides comprehensive documentation for the 7-node Odroid C4 NixO
 - [Software Stack](#software-stack)
 - [Repository Structure](#repository-structure)
 - [Management Workflows](#management-workflows)
+- [Container Operations](#container-operations)
 - [Configuration Reference](#configuration-reference)
 - [Troubleshooting](#troubleshooting)
 
@@ -309,8 +310,30 @@ environment.systemPackages = with pkgs; [
   tmux     # Terminal multiplexer
   curl     # HTTP client
   wget     # File downloader
+  # Container tools
+  podman-compose  # Multi-container orchestration
+  skopeo          # Image operations (inspect, copy)
+  buildah         # Image building
 ];
 ```
+
+### Container Runtime
+
+All nodes run **Podman 5.4.1**, a daemonless container runtime:
+
+| Component | Version | Purpose |
+|-----------|---------|---------|
+| **Podman** | 5.4.1 | Container runtime (Docker-compatible) |
+| **crun** | 1.21 | OCI runtime (lightweight) |
+| **buildah** | 1.40.0 | Build container images |
+| **skopeo** | 1.18.0 | Inspect/copy images without pulling |
+| **podman-compose** | 1.3.0 | Multi-container orchestration |
+
+**Key features:**
+- `docker` CLI alias works (full Docker command compatibility)
+- Rootless containers supported (run as `admin` user)
+- DNS resolution in container networks enabled
+- No daemon process (lighter than Docker)
 
 ### Security Configuration
 
@@ -627,6 +650,379 @@ nix build nixpkgs#hello -v 2>&1 | grep "building.*on"
 
 ---
 
+## Container Operations
+
+The cluster provides a full container runtime on all 7 nodes. This section covers common patterns for running containerized workloads.
+
+### Quick Start
+
+```bash
+# Run a container (works on any node)
+ssh admin@node1.local "docker run --rm alpine echo 'Hello from the cluster!'"
+
+# Check container runtime
+ssh admin@node1.local "podman --version"
+# podman version 5.4.1
+```
+
+### Basic Container Operations
+
+#### Running Containers
+
+```bash
+# Simple one-off container
+podman run --rm alpine cat /etc/os-release
+
+# Interactive shell
+podman run -it --rm alpine sh
+
+# Background container with name
+podman run -d --name my-nginx nginx:alpine
+
+# With port mapping
+podman run -d -p 8080:80 --name web nginx:alpine
+
+# With resource limits (256MB RAM, 0.5 CPU)
+podman run --rm --memory=256m --cpus=0.5 alpine sh -c 'echo "Limited container"'
+
+# With environment variables
+podman run --rm -e DATABASE_URL="postgres://..." alpine env
+
+# With volume mount
+podman run --rm -v /data:/app/data:ro alpine ls /app/data
+```
+
+#### Managing Containers
+
+```bash
+# List running containers
+podman ps
+
+# List all containers (including stopped)
+podman ps -a
+
+# Stop a container
+podman stop my-nginx
+
+# Remove a container
+podman rm my-nginx
+
+# View logs
+podman logs my-nginx
+podman logs -f my-nginx  # Follow
+
+# Execute command in running container
+podman exec my-nginx nginx -t
+
+# Inspect container details
+podman inspect my-nginx
+```
+
+#### Managing Images
+
+```bash
+# List local images
+podman images
+
+# Pull an image
+podman pull nginx:alpine
+
+# Remove an image
+podman rmi nginx:alpine
+
+# Remove all unused images
+podman image prune -a
+
+# Search Docker Hub
+podman search redis
+```
+
+### Building Images with Buildah
+
+Buildah allows building OCI images without a Dockerfile:
+
+```bash
+# Start from a base image
+container=$(buildah from alpine:latest)
+
+# Run commands in the container
+buildah run $container -- apk add --no-cache curl jq
+
+# Set configuration
+buildah config --cmd '/usr/bin/curl --version' $container
+buildah config --env API_KEY=changeme $container
+buildah config --label maintainer="admin@cluster" $container
+
+# Commit to an image
+buildah commit $container my-tools:latest
+
+# Clean up working container
+buildah rm $container
+
+# Use the image
+podman run --rm my-tools:latest
+```
+
+#### Building from Dockerfile
+
+```bash
+# Standard Dockerfile build
+buildah bud -t my-app:latest .
+
+# With build args
+buildah bud --build-arg VERSION=1.0 -t my-app:latest .
+```
+
+### Multi-Container Applications
+
+Use `podman-compose` for applications with multiple services:
+
+```yaml
+# docker-compose.yml (or compose.yml)
+version: '3'
+services:
+  web:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./html:/usr/share/nginx/html:ro
+    depends_on:
+      - api
+
+  api:
+    image: python:3-alpine
+    command: python -m http.server 5000
+    ports:
+      - "5000:5000"
+
+  redis:
+    image: redis:alpine
+```
+
+```bash
+# Start all services
+podman-compose up -d
+
+# View status
+podman-compose ps
+
+# View logs
+podman-compose logs -f
+
+# Stop all services
+podman-compose down
+
+# Stop and remove volumes
+podman-compose down -v
+```
+
+### Inspecting Remote Images
+
+Use `skopeo` to inspect images without downloading them:
+
+```bash
+# Inspect image metadata
+skopeo inspect docker://docker.io/library/nginx:alpine
+
+# List available tags
+skopeo list-tags docker://docker.io/library/redis
+
+# Copy image between registries
+skopeo copy docker://source-registry/image:tag docker://dest-registry/image:tag
+
+# Copy to local directory (for offline transfer)
+skopeo copy docker://nginx:alpine dir:/tmp/nginx-image
+```
+
+### Cluster-Wide Patterns
+
+#### Run Container on Specific Node
+
+```bash
+# From MacBook - run on node3
+ssh -J samuel@desktop admin@node3.local "podman run --rm nginx:alpine nginx -v"
+```
+
+#### Run Same Container on All Nodes
+
+```bash
+# Parallel execution across cluster
+for i in 1 2 3 4 5 6 7; do
+  ssh -J samuel@desktop admin@node$i.local "podman run --rm alpine hostname" &
+done
+wait
+```
+
+#### Distribute Workload Across Nodes
+
+```bash
+# Process different data on each node
+for i in 1 2 3 4 5 6 7; do
+  ssh -J samuel@desktop admin@node$i.local \
+    "podman run --rm -e SHARD=$i my-processor:latest" &
+done
+wait
+```
+
+#### Check Container Status Cluster-Wide
+
+```bash
+for i in 1 2 3 4 5 6 7; do
+  echo "=== node$i ==="
+  ssh -J samuel@desktop admin@node$i.local "podman ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}'" 2>/dev/null || echo "No containers"
+done
+```
+
+### Long-Running Services
+
+For services that should persist across reboots, create systemd units:
+
+```bash
+# Generate systemd unit from running container
+podman generate systemd --name my-service --files --new
+
+# Or define in configuration.nix (recommended):
+```
+
+```nix
+# In configuration.nix - containerized service
+virtualisation.oci-containers.containers.my-service = {
+  image = "nginx:alpine";
+  ports = [ "8080:80" ];
+  volumes = [ "/data/html:/usr/share/nginx/html:ro" ];
+  extraOptions = [ "--memory=512m" ];
+};
+```
+
+### Storage and Persistence
+
+```bash
+# Named volumes (managed by Podman)
+podman volume create my-data
+podman run -v my-data:/app/data my-app:latest
+
+# List volumes
+podman volume ls
+
+# Inspect volume
+podman volume inspect my-data
+
+# Remove volume
+podman volume rm my-data
+
+# Bind mounts (host directory)
+podman run -v /home/admin/data:/app/data my-app:latest
+```
+
+### Networking
+
+```bash
+# Create custom network
+podman network create my-network
+
+# Run containers on same network (they can reach each other by name)
+podman run -d --name db --network my-network postgres:alpine
+podman run -d --name app --network my-network -e DB_HOST=db my-app:latest
+
+# List networks
+podman network ls
+
+# Inspect network
+podman network inspect my-network
+
+# Remove network
+podman network rm my-network
+```
+
+### Resource Management
+
+```bash
+# Memory limit
+podman run --memory=512m alpine
+
+# CPU limit (1.5 cores)
+podman run --cpus=1.5 alpine
+
+# CPU shares (relative weight)
+podman run --cpu-shares=512 alpine
+
+# Combined limits
+podman run --memory=256m --cpus=0.5 --pids-limit=100 alpine
+```
+
+### Cleanup Commands
+
+```bash
+# Remove all stopped containers
+podman container prune
+
+# Remove all unused images
+podman image prune -a
+
+# Remove all unused volumes
+podman volume prune
+
+# Remove all unused networks
+podman network prune
+
+# Nuclear option: remove everything
+podman system prune -a --volumes
+```
+
+### Troubleshooting Containers
+
+```bash
+# Check container logs
+podman logs <container>
+
+# Follow logs in real-time
+podman logs -f <container>
+
+# Inspect container config
+podman inspect <container>
+
+# Check resource usage
+podman stats
+
+# Get shell in running container
+podman exec -it <container> sh
+
+# Check why container exited
+podman inspect <container> --format '{{.State.ExitCode}} {{.State.Error}}'
+```
+
+### Best Practices for the Cluster
+
+1. **Use Alpine-based images** - Smaller footprint, faster pulls (important with SD card storage)
+
+2. **Set resource limits** - Prevent runaway containers from affecting the node:
+   ```bash
+   podman run --memory=512m --cpus=1 my-app
+   ```
+
+3. **Clean up regularly** - SD card space is limited:
+   ```bash
+   podman system prune -a  # Run periodically
+   ```
+
+4. **Use `--rm` for one-off tasks** - Automatically removes container when done:
+   ```bash
+   podman run --rm alpine echo "done"
+   ```
+
+5. **Prefer bind mounts for data** - Named volumes consume SD card space:
+   ```bash
+   podman run -v /home/admin/data:/data my-app
+   ```
+
+6. **Tag images explicitly** - Avoid `:latest` in production:
+   ```bash
+   podman pull nginx:1.25-alpine  # Not nginx:latest
+   ```
+
+---
+
 ## Configuration Reference
 
 ### Adding Packages
@@ -850,8 +1246,13 @@ This enables:
 | SSH via jump host | `ssh -J samuel@desktop admin@node1.local` |
 | Check all nodes | `for i in 1..7; do ssh admin@node$i.local uptime; done` |
 | Build image | `nix build .#node1-sdImage` |
-| Deploy to node | `nixos-rebuild switch --flake .#node1 --target-host admin@node1.local --build-host admin@node1.local` |
+| Deploy to node | `ssh admin@node1.local "sudo nixos-rebuild switch --flake 'git+ssh://...#node1' --refresh"` |
 | Update flake | `nix flake update` |
 | Rollback node | `ssh admin@node1.local sudo nixos-rebuild switch --rollback` |
 | View logs | `ssh admin@node1.local journalctl -f` |
 | Reboot node | `ssh admin@node1.local sudo reboot` |
+| Run container | `ssh admin@node1.local "podman run --rm alpine echo hello"` |
+| List containers | `ssh admin@node1.local podman ps -a` |
+| Build image | `ssh admin@node1.local "buildah bud -t myapp ."` |
+| Cluster containers | `for i in 1..7; do ssh admin@node$i.local podman ps; done` |
+| Clean up images | `ssh admin@node1.local "podman system prune -a"` |
