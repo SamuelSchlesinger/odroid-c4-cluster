@@ -21,8 +21,18 @@
       # Generic configuration
       odroid-c4 = mkNode "odroid-c4";
 
-      # Individual nodes
-      node1 = mkNode "node1";
+      # node1 - monitoring hub (Prometheus + Grafana)
+      node1 = nixpkgs.lib.nixosSystem {
+        system = "aarch64-linux";
+        modules = [
+          ./hardware-configuration.nix
+          ./configuration.nix
+          ./monitoring.nix
+          { networking.hostName = "node1"; }
+        ];
+      };
+
+      # Other nodes
       node2 = mkNode "node2";
       node3 = mkNode "node3";
       node4 = mkNode "node4";

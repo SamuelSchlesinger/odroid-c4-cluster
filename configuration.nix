@@ -10,10 +10,10 @@
     # Use DHCP on all interfaces (systemd-networkd handles naming)
     useDHCP = true;
 
-    # Firewall - allow SSH
+    # Firewall - allow SSH and node_exporter
     firewall = {
       enable = true;
-      allowedTCPPorts = [ 22 ];
+      allowedTCPPorts = [ 22 9100 ];
     };
   };
 
@@ -61,6 +61,16 @@
       addresses = true;
       workstation = true;
     };
+  };
+
+  # Node exporter for Prometheus metrics (all nodes)
+  services.prometheus.exporters.node = {
+    enable = true;
+    port = 9100;
+    enabledCollectors = [
+      "systemd"
+      "processes"
+    ];
   };
 
   # Basic packages
