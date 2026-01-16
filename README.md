@@ -83,7 +83,6 @@ odroid-c4/
 ├── configuration.nix            # System config (SSH, users, packages, builds)
 ├── hardware-configuration.nix   # Odroid C4 hardware + Tow-Boot boot
 ├── flash-with-towboot.sh        # Flash script for macOS
-├── distribute-cluster-keys.sh   # Distribute admin SSH keys to nodes
 ├── setup-distributed-builds.sh  # Set up root SSH + signing keys
 ├── README.md                    # This file
 ├── CLAUDE.md                    # Claude Code operational guide

@@ -243,39 +243,23 @@ ssh node5    # Works from anywhere with Tailscale connected
 The cluster accepts these SSH keys (defined in `configuration.nix`):
 
 ```nix
+# Admin user - external access
 openssh.authorizedKeys.keys = [
   # MacBook
   "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOv/btyrQGVnaGQCLEdkOGKtGgSN2TmdFMgDyst4tpaz samuelschlesinger@Samuels-MacBook-Pro.local"
   # Desktop
   "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMXkHnuxSPuZfVl1vMa6h4H230X3s1f3ch4oZGKTz91f samuel@desktop"
-  # Cluster inter-node keys (node1 through node7)
-  "ssh-ed25519 ... node1@odroid-cluster"
-  # ... (all 7 node keys)
+];
+
+# Root user - distributed builds only
+users.users.root.openssh.authorizedKeys.keys = [
+  "ssh-ed25519 AAAA... root@odroid-cluster"  # Shared cluster key
 ];
 ```
 
-### Inter-Node SSH Access
-
-Nodes can SSH to each other directly for cluster operations:
-
-```bash
-# From node1, SSH to node2
-ssh admin@node1.local
-ssh node2 hostname   # Works directly between nodes
-```
-
 **Key Storage Locations**:
-- MacBook: `~/.ssh/odroid-cluster/node{1-7}` (private) and `.pub` (public)
-- Desktop: `~/.ssh/odroid-cluster/node{1-7}` (private) and `.pub` (public)
-- Nodes: `~/.ssh/id_ed25519` (each node has its own key)
-
-**Re-distributing Keys** (if needed):
-
-```bash
-# From MacBook, run the distribution script
-./distribute-cluster-keys.sh        # All nodes
-./distribute-cluster-keys.sh 3      # Single node
-```
+- MacBook/Desktop: `~/.ssh/odroid-cluster/root-cluster` (root key for distributed builds)
+- Nodes: `/root/.ssh/id_ed25519` (shared root key for inter-node builds)
 
 ---
 
@@ -341,7 +325,6 @@ odroid-c4-cluster/
 ├── configuration.nix         # Shared NixOS config for all nodes
 ├── hardware-configuration.nix # Odroid C4 hardware settings
 ├── flash-with-towboot.sh     # SD card flashing script (macOS)
-├── distribute-cluster-keys.sh # Admin SSH key distribution script
 ├── setup-distributed-builds.sh # Root SSH + cache key distribution
 ├── .gitignore                # Ignores build outputs and logs
 ├── README.md                 # Quick start guide

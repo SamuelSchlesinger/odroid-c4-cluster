@@ -77,7 +77,6 @@ done
 | `flake.nix` | Node definitions, build outputs | Rarely |
 | `flake.lock` | Pinned nixpkgs version | Only when updating packages |
 | `hardware-configuration.nix` | Boot/hardware settings | Rarely |
-| `distribute-cluster-keys.sh` | Admin SSH key distribution | Rarely |
 | `setup-distributed-builds.sh` | Root SSH + cache key setup | Rarely |
 | `CLUSTER-GUIDE.md` | Comprehensive documentation | As needed |
 
@@ -239,19 +238,13 @@ nix build nixpkgs#hello --max-jobs 0
 ./setup-distributed-builds.sh    # Distributes root keys and signing keys
 ```
 
-## Inter-Node SSH
-
-Nodes can SSH to each other directly:
-
-```bash
-# From node1
-ssh node2 hostname    # Uses ~/.ssh/config for easy access
-```
+## SSH Key Storage
 
 **Key storage** (MacBook and desktop):
-- `~/.ssh/odroid-cluster/node{1-7}` - Per-node admin keys
 - `~/.ssh/odroid-cluster/root-cluster` - Root key for distributed builds
 - `~/.ssh/odroid-cluster/cache/` - Binary cache signing keys
+
+Inter-node communication uses the shared root key for distributed builds only. Admin-to-admin SSH between nodes is not configured; use the desktop as a jump host if needed.
 
 ## Cluster Specifications
 
