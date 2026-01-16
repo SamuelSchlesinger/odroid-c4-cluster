@@ -115,9 +115,9 @@ in
     wantedBy = [ "timers.target" ];
 
     timerConfig = {
-      OnBootSec = "2min";           # First run 2 minutes after boot
-      OnUnitActiveSec = "5min";     # Then every 5 minutes
-      RandomizedDelaySec = "30s";   # Stagger across nodes to avoid thundering herd
+      OnBootSec = "15s";            # First run 15 seconds after boot
+      OnUnitActiveSec = "15s";      # Then every 15 seconds
+      RandomizedDelaySec = "5s";    # Stagger across nodes
       Persistent = true;            # Run immediately if missed (e.g., system was off)
     };
   };
