@@ -15,7 +15,8 @@ This repository contains the **NixOS configuration for a 7-node Odroid C4 cluste
 | Check cluster health | See [Health Check](#health-check) below |
 | SSH to node | `ssh admin@node1.local` (or via jump host) |
 | Build image | On desktop: `nix build .#node1-sdImage` |
-| Deploy to node | On desktop: `nixos-rebuild switch --flake .#node1 --target-host admin@node1.local --build-host admin@node1.local` |
+| Deploy to node | `ssh admin@node1.local "sudo nixos-rebuild switch --flake 'git+ssh://git@github.com/SamuelSchlesinger/odroid-c4-cluster#node1'"` |
+| Deploy all nodes | See [Deploying to All Nodes](#deploying-to-all-nodes) |
 | Update packages | On desktop: `nix flake update && git add flake.lock && git commit && git push` |
 | Sync repo | `git pull origin main` / `git push origin main` |
 
@@ -89,10 +90,31 @@ done
    ```bash
    git add -A && git commit -m "Description" && git push
    ```
-3. Deploy from desktop:
+3. Deploy to nodes (nodes pull directly from GitHub):
    ```bash
-   ssh samuel@desktop "cd ~/sysadmin/odroid-c4 && git pull && nixos-rebuild switch --flake .#node1 --target-host admin@node1.local --build-host admin@node1.local"
+   # Single node (from desktop or via jump host)
+   ssh admin@node1.local "sudo nixos-rebuild switch --flake 'git+ssh://git@github.com/SamuelSchlesinger/odroid-c4-cluster#node1'"
+
+   # From MacBook via jump host
+   ssh -J samuel@desktop admin@node1.local "sudo nixos-rebuild switch --flake 'git+ssh://git@github.com/SamuelSchlesinger/odroid-c4-cluster#node1'"
    ```
+
+### Deploying to All Nodes
+
+Deploy to all nodes in parallel:
+```bash
+# From desktop
+for i in 1 2 3 4 5 6 7; do
+  ssh admin@node$i.local "sudo nixos-rebuild switch --flake 'git+ssh://git@github.com/SamuelSchlesinger/odroid-c4-cluster#node$i'" &
+done
+wait
+
+# From MacBook (via jump host)
+for i in 1 2 3 4 5 6 7; do
+  ssh -J samuel@desktop admin@node$i.local "sudo nixos-rebuild switch --flake 'git+ssh://git@github.com/SamuelSchlesinger/odroid-c4-cluster#node$i'" &
+done
+wait
+```
 
 ### Adding a Package
 
@@ -138,12 +160,11 @@ git add flake.lock
 git commit -m "Update flake inputs"
 git push
 
-# Then deploy to all nodes
+# Then deploy to all nodes (nodes pull from GitHub)
 for i in 1 2 3 4 5 6 7; do
-  nixos-rebuild switch --flake .#node$i \
-    --target-host admin@node$i.local \
-    --build-host admin@node$i.local
+  ssh admin@node$i.local "sudo nixos-rebuild switch --flake 'git+ssh://git@github.com/SamuelSchlesinger/odroid-c4-cluster#node$i'" &
 done
+wait
 ```
 
 ## Guidelines for Claude Workers
@@ -241,10 +262,14 @@ nix build nixpkgs#hello --max-jobs 0
 ## SSH Key Storage
 
 **Key storage** (MacBook and desktop):
-- `~/.ssh/odroid-cluster/root-cluster` - Root key for distributed builds
+- `~/.ssh/odroid-cluster/root-cluster` - Root key for distributed builds and GitHub access
 - `~/.ssh/odroid-cluster/cache/` - Binary cache signing keys
 
-Inter-node communication uses the shared root key for distributed builds only. Admin-to-admin SSH between nodes is not configured; use the desktop as a jump host if needed.
+**The root key (`root@odroid-cluster`) serves two purposes:**
+1. Inter-node SSH for distributed builds (nodes can SSH to each other as root)
+2. GitHub deploy key for pulling the private repo directly on nodes
+
+**Security note:** The cluster root key is NOT authorized on the desktop or MacBook - nodes cannot SSH back to those machines.
 
 ## Cluster Specifications
 

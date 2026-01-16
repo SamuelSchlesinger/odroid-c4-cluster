@@ -258,8 +258,12 @@ users.users.root.openssh.authorizedKeys.keys = [
 ```
 
 **Key Storage Locations**:
-- MacBook/Desktop: `~/.ssh/odroid-cluster/root-cluster` (root key for distributed builds)
-- Nodes: `/root/.ssh/id_ed25519` (shared root key for inter-node builds)
+- MacBook/Desktop: `~/.ssh/odroid-cluster/root-cluster` (root key for distributed builds and GitHub)
+- Nodes: `/root/.ssh/id_ed25519` (shared root key for inter-node builds and GitHub access)
+
+**GitHub Deploy Key**: The `root@odroid-cluster` public key is configured as a read-only deploy key on the GitHub repo, allowing nodes to pull configuration directly.
+
+**Security**: The cluster root key is NOT authorized on the desktop or MacBook - nodes cannot SSH back to those machines.
 
 ---
 
@@ -409,22 +413,21 @@ diskutil list
 
 ### Deploy Configuration to Running Nodes
 
-For updates that don't require reflashing:
+Nodes can pull configuration directly from GitHub using the root SSH key (configured as a deploy key on the repo).
 
 ```bash
-# On desktop (single node)
-cd ~/sysadmin/odroid-c4
-nixos-rebuild switch --flake .#node1 \
-  --target-host admin@node1.local \
-  --build-host admin@node1.local
+# Single node (from desktop)
+ssh admin@node1.local "sudo nixos-rebuild switch --flake 'git+ssh://git@github.com/SamuelSchlesinger/odroid-c4-cluster#node1'"
 
-# All nodes
+# Single node (from MacBook via jump host)
+ssh -J samuel@desktop admin@node1.local "sudo nixos-rebuild switch --flake 'git+ssh://git@github.com/SamuelSchlesinger/odroid-c4-cluster#node1'"
+
+# All nodes in parallel (from desktop)
 for i in 1 2 3 4 5 6 7; do
   echo "=== Deploying to node$i ==="
-  nixos-rebuild switch --flake .#node$i \
-    --target-host admin@node$i.local \
-    --build-host admin@node$i.local
+  ssh admin@node$i.local "sudo nixos-rebuild switch --flake 'git+ssh://git@github.com/SamuelSchlesinger/odroid-c4-cluster#node$i'" &
 done
+wait
 ```
 
 ### Check Cluster Health

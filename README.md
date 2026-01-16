@@ -49,20 +49,17 @@ All system settings are in `configuration.nix`:
 
 ## Remote Updates
 
-After initial deployment, update nodes without reflashing:
+After initial deployment, update nodes without reflashing. Nodes can pull directly from GitHub using the root SSH key (configured as a deploy key):
 
 ```bash
-# From desktop
-nixos-rebuild switch --flake .#node1 \
-  --target-host admin@node1.local \
-  --build-host admin@node1.local
-```
+# Single node
+ssh admin@node1.local "sudo nixos-rebuild switch --flake 'git+ssh://git@github.com/SamuelSchlesinger/odroid-c4-cluster#node1'"
 
-Or copy config to nodes and rebuild remotely:
-
-```bash
-# Copy config, then on each node:
-ssh admin@node1.local "sudo nixos-rebuild switch --flake /tmp/nixos-config#node1"
+# All nodes in parallel
+for i in 1 2 3 4 5 6 7; do
+  ssh admin@node$i.local "sudo nixos-rebuild switch --flake 'git+ssh://git@github.com/SamuelSchlesinger/odroid-c4-cluster#node$i'" &
+done
+wait
 ```
 
 ## Distributed Builds
