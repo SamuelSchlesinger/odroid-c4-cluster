@@ -474,51 +474,106 @@ sudo nix-env --list-generations -p /nix/var/nix/profiles/system
 sudo nixos-rebuild switch --rollback
 ```
 
-### Desktop Binary Cache
-
-The desktop runs a binary cache server (nix-serve) that cluster nodes use as a primary substituter. This speeds up builds by serving packages that exist in the desktop's Nix store.
-
-**Cache details**:
-- URL: `http://192.168.4.25:5000` (desktop IP - consider DHCP reservation)
-- Runs automatically via systemd user service with lingering enabled
-- Port 5000/tcp opened in UFW firewall
-
-**Verify cache is running** (on desktop):
-```bash
-systemctl --user status nix-serve
-curl http://localhost:5000/nix-cache-info
-```
-
-**If desktop IP changes**: Update `substituters` in `configuration.nix` with new IP.
-
 ### Distributed Builds
 
-The cluster is configured for Nix distributed builds, allowing any node to offload builds to all other nodes (28 cores total).
+The cluster uses Nix distributed builds to share build capacity across all 7 nodes (28 cores total). When you build something on any node, Nix can automatically offload work to other nodes.
 
-**How it works**:
-- Each node has all 7 nodes listed as build machines
-- Root SSH keys allow the nix-daemon to connect between nodes
-- A shared signing key ensures nodes trust each other's builds
+#### How It Works
 
-**Using distributed builds**:
-
-```bash
-# Build using all cluster nodes (from any node)
-sudo nix build nixpkgs#package -j0
-
-# The -j0 flag tells Nix to use remote builders only
-# Without -j0, it will use local + remote builders
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Distributed Build Flow                                │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  1. User runs `nix build` on node1                                      │
+│                                                                          │
+│  2. Nix daemon checks what needs building                               │
+│                                                                          │
+│  3. For each derivation, daemon either:                                 │
+│     - Downloads from cache.nixos.org (if available)                     │
+│     - Builds locally                                                    │
+│     - Offloads to a remote node via SSH                                 │
+│                                                                          │
+│  4. Remote builds happen via:                                           │
+│     ssh root@node2.local nix-store --serve --write                      │
+│                                                                          │
+│  5. Built artifacts are copied back to requesting node                  │
+│                                                                          │
+│  ┌───────┐         ┌───────┐         ┌───────┐                         │
+│  │ node1 │ ──────► │ node2 │         │ node3 │                         │
+│  │(user) │ build   │(build)│         │(build)│                         │
+│  └───────┘ request └───────┘         └───────┘                         │
+│      ▲                 │                 │                              │
+│      └─────────────────┴─────────────────┘                              │
+│                  results copied back                                     │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Key files for distributed builds**:
-- `/etc/nix/machines` - List of remote build machines
-- `/etc/nix/cache-priv-key.pem` - Signing key for builds
-- `/root/.ssh/id_ed25519` - Root SSH key for inter-node access
+#### Configuration (in configuration.nix)
 
-**Re-setup distributed builds** (if keys need redistribution):
+The distributed builds setup has three parts:
+
+**1. Enable distributed builds:**
+```nix
+nix.distributedBuilds = true;
+```
+
+**2. Define build machines (all 7 nodes):**
+```nix
+nix.buildMachines = [
+  {
+    hostName = "node1.local";           # mDNS hostname
+    sshUser = "root";                   # Must be root for nix-daemon
+    sshKey = "/root/.ssh/id_ed25519";   # Shared cluster root key
+    system = "aarch64-linux";           # Architecture
+    maxJobs = 4;                        # CPU cores available
+    speedFactor = 1;                    # Priority (all equal)
+    supportedFeatures = [ "nixos-test" "big-parallel" ];
+  }
+  # ... repeated for all 7 nodes
+];
+```
+
+**3. Root SSH access (for inter-node builds):**
+```nix
+services.openssh.settings.PermitRootLogin = "prohibit-password";
+users.users.root.openssh.authorizedKeys.keys = [
+  "ssh-ed25519 AAAA... root@odroid-cluster"  # Shared root key
+];
+```
+
+#### Key Files on Each Node
+
+| Path | Purpose |
+|------|---------|
+| `/root/.ssh/id_ed25519` | Root private key for SSH to other nodes |
+| `/etc/nix/cache-priv-key.pem` | Signs builds so other nodes trust them |
+| Generated `/etc/nix/machines` | List of remote builders (from buildMachines) |
+
+#### Using Distributed Builds
 
 ```bash
-# From MacBook
+# Normal build - uses local + remote nodes
+nix build nixpkgs#hello
+
+# Force remote-only (useful for testing)
+nix build nixpkgs#hello --max-jobs 0
+
+# See which nodes are being used
+nix build nixpkgs#hello -v 2>&1 | grep "building.*on"
+```
+
+#### Important Notes
+
+- **Nodes don't share stores**: Each node has its own `/nix/store`. If node1 builds something, node2 must rebuild it (unless it's in cache.nixos.org).
+- **Pre-built packages**: Most nixpkgs packages are in cache.nixos.org, so distributed builds mainly help for custom derivations or packages not in the cache.
+- **Latency**: Distributed builds add SSH overhead. For small builds, local is faster.
+
+#### Re-setup Keys (if needed)
+
+```bash
+# From MacBook, distribute root SSH and cache signing keys
 ./setup-distributed-builds.sh        # All nodes
 ./setup-distributed-builds.sh 3      # Single node
 ```

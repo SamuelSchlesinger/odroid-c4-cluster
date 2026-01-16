@@ -199,33 +199,40 @@ cd ~/sysadmin/odroid-c4
 nix build .#node1-sdImage
 ```
 
-## Desktop Binary Cache
-
-The desktop runs `nix-serve` as a binary cache for the cluster.
-
-- **URL**: `http://192.168.4.25:5000`
-- **Auto-starts**: systemd user service with lingering
-- **Public key**: `desktop-cache:VKMDqj8ZMNSALD1+vnmLs/ZBtBU9RgzrOAUQYQbldak=`
-
-**Check status**: `ssh samuel@desktop "systemctl --user status nix-serve"`
-
-**If desktop IP changes**: Update `substituters` in `configuration.nix`.
-
 ## Distributed Builds
 
-The cluster supports distributed Nix builds across all 7 nodes (28 cores total).
+The cluster uses Nix distributed builds to share capacity across all 7 nodes (28 cores total). When you build on any node, Nix can offload work to other nodes automatically.
 
-**From any cluster node**:
-```bash
-# Use -j0 to force remote building across the cluster
-sudo nix build nixpkgs#package -j0
+**How it works** (see `configuration.nix:99-112`):
+1. `nix.distributedBuilds = true` enables the feature
+2. `nix.buildMachines` lists all 7 nodes with their specs
+3. Root SSH keys allow nix-daemon to connect between nodes
+4. A shared signing key ensures nodes trust each other's builds
+
+**Key configuration in configuration.nix**:
+```nix
+nix.distributedBuilds = true;
+nix.buildMachines = [
+  { hostName = "node1.local"; sshUser = "root"; sshKey = "/root/.ssh/id_ed25519";
+    system = "aarch64-linux"; maxJobs = 4; ... }
+  # ... all 7 nodes
+];
 ```
 
-**Key infrastructure**:
-- Desktop binary cache as primary substituter
-- Root SSH enabled (key-based only) for nix-daemon inter-node access
-- Shared signing key at `/etc/nix/cache-priv-key.pem`
-- Build machines configured in `/etc/nix/machines`
+**Using distributed builds**:
+```bash
+# Normal build - uses local + remote nodes
+nix build nixpkgs#hello
+
+# Force remote-only
+nix build nixpkgs#hello --max-jobs 0
+```
+
+**Important**: Nodes don't share stores automatically. Each has its own `/nix/store`. Most packages come from cache.nixos.org; distributed builds help with custom derivations.
+
+**Key files on each node**:
+- `/root/.ssh/id_ed25519` - Root SSH key for inter-node access
+- `/etc/nix/cache-priv-key.pem` - Signing key for builds
 
 **Re-setup if needed**:
 ```bash
