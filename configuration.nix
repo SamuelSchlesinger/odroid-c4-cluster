@@ -4,9 +4,6 @@
   # System basics
   system.stateVersion = "24.11";
 
-  # NFS client support for PersistentVolumes
-  boot.supportedFilesystems = [ "nfs" ];
-
   networking = {
     hostName = lib.mkDefault "odroid-c4";
 
@@ -85,7 +82,6 @@
     curl
     wget
     kubectl     # Kubernetes CLI
-    nfs-utils   # NFS client for PersistentVolumes
   ];
 
   # Enable flakes and distributed builds
