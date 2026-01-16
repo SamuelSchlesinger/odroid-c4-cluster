@@ -13,6 +13,7 @@
       modules = [
         ./hardware-configuration.nix
         ./configuration.nix
+        ./k3s.nix
         { networking.hostName = hostname; }
       ];
     };
@@ -21,12 +22,13 @@
       # Generic configuration
       odroid-c4 = mkNode "odroid-c4";
 
-      # node1 - monitoring hub (Prometheus + Grafana)
+      # node1 - monitoring hub (Prometheus + Grafana) + K3s initial server
       node1 = nixpkgs.lib.nixosSystem {
         system = "aarch64-linux";
         modules = [
           ./hardware-configuration.nix
           ./configuration.nix
+          ./k3s.nix
           ./monitoring.nix
           { networking.hostName = "node1"; }
         ];

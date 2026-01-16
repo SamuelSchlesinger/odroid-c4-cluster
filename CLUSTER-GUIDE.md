@@ -11,7 +11,7 @@ This document provides comprehensive documentation for the 7-node Odroid C4 NixO
 - [Software Stack](#software-stack)
 - [Repository Structure](#repository-structure)
 - [Management Workflows](#management-workflows)
-- [Container Operations](#container-operations)
+- [Kubernetes (K3s)](#kubernetes-k3s)
 - [Configuration Reference](#configuration-reference)
 - [Troubleshooting](#troubleshooting)
 
@@ -297,6 +297,8 @@ users.users.root.openssh.authorizedKeys.keys = [
 | OpenSSH | Remote access | 22 | All nodes |
 | Avahi | mDNS discovery | 5353/udp | All nodes |
 | node_exporter | System metrics | 9100 | All nodes |
+| K3s API | Kubernetes API server | 6443 | All nodes |
+| etcd | K3s cluster state | 2379-2380 | All nodes |
 | Prometheus | Metrics aggregation | 9090 | node1 |
 | Grafana | Dashboards | 3000 | node1 |
 
@@ -310,30 +312,26 @@ environment.systemPackages = with pkgs; [
   tmux     # Terminal multiplexer
   curl     # HTTP client
   wget     # File downloader
-  # Container tools
-  podman-compose  # Multi-container orchestration
-  skopeo          # Image operations (inspect, copy)
-  buildah         # Image building
+  kubectl  # Kubernetes CLI
 ];
 ```
 
-### Container Runtime
+### Container Orchestration
 
-All nodes run **Podman 5.4.1**, a daemonless container runtime:
+All nodes run **K3s**, a lightweight Kubernetes distribution:
 
-| Component | Version | Purpose |
-|-----------|---------|---------|
-| **Podman** | 5.4.1 | Container runtime (Docker-compatible) |
-| **crun** | 1.21 | OCI runtime (lightweight) |
-| **buildah** | 1.40.0 | Build container images |
-| **skopeo** | 1.18.0 | Inspect/copy images without pulling |
-| **podman-compose** | 1.3.0 | Multi-container orchestration |
+| Component | Purpose |
+|-----------|---------|
+| **K3s** | Lightweight Kubernetes (single binary) |
+| **containerd** | Container runtime (bundled with K3s) |
+| **flannel** | Pod networking (VXLAN backend) |
+| **CoreDNS** | Service discovery |
 
-**Key features:**
-- `docker` CLI alias works (full Docker command compatibility)
-- Rootless containers supported (run as `admin` user)
-- DNS resolution in container networks enabled
-- No daemon process (lighter than Docker)
+**Cluster topology:**
+- All 7 nodes run as K3s servers (control plane + workloads)
+- node1 is the initial server (bootstrap node)
+- Tolerates loss of up to 3 nodes (4-node quorum)
+- ~50MB RAM overhead per node
 
 ### Security Configuration
 
@@ -414,6 +412,7 @@ odroid-c4-cluster/
 ├── flake.nix                 # Nix flake: defines all 7 nodes
 ├── flake.lock                # Pinned dependencies (nixpkgs version)
 ├── configuration.nix         # Shared NixOS config for all nodes
+├── k3s.nix                   # K3s Kubernetes configuration (all nodes)
 ├── monitoring.nix            # Prometheus + Grafana (node1 only)
 ├── hardware-configuration.nix # Odroid C4 hardware settings
 ├── flash-with-towboot.sh     # SD card flashing script (macOS)
@@ -650,376 +649,226 @@ nix build nixpkgs#hello -v 2>&1 | grep "building.*on"
 
 ---
 
-## Container Operations
+## Kubernetes (K3s)
 
-The cluster provides a full container runtime on all 7 nodes. This section covers common patterns for running containerized workloads.
+The cluster runs K3s, a lightweight Kubernetes distribution. All 7 nodes operate as servers, providing a highly available control plane that can tolerate up to 3 node failures.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      K3s Cluster Architecture                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │                    K3s Server Cluster (HA)                       │   │
+│   │                                                                  │   │
+│   │   node1        node2        node3        node4                  │   │
+│   │   (init)                                                         │   │
+│   │    ┌──┐        ┌──┐        ┌──┐        ┌──┐                     │   │
+│   │    │S │◄──────►│S │◄──────►│S │◄──────►│S │                     │   │
+│   │    └──┘        └──┘        └──┘        └──┘                     │   │
+│   │      ▲           ▲           ▲           ▲                       │   │
+│   │      │           │           │           │                       │   │
+│   │      ▼           ▼           ▼           ▼                       │   │
+│   │   node5        node6        node7                               │   │
+│   │    ┌──┐        ┌──┐        ┌──┐                                 │   │
+│   │    │S │◄──────►│S │◄──────►│S │                                 │   │
+│   │    └──┘        └──┘        └──┘                                 │   │
+│   │                                                                  │   │
+│   │   S = Server (API + etcd + kubelet)                             │   │
+│   │   All nodes can run workloads                                    │   │
+│   │   Quorum: 4 nodes (tolerates 3 failures)                        │   │
+│   │                                                                  │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                          │
+│   Networking: Flannel VXLAN (port 8472/udp)                             │
+│   DNS: CoreDNS (cluster.local)                                          │
+│   API: https://any-node:6443                                            │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Ports
+
+| Port | Protocol | Purpose |
+|------|----------|---------|
+| 6443 | TCP | Kubernetes API server |
+| 2379 | TCP | etcd client |
+| 2380 | TCP | etcd peer |
+| 8472 | UDP | Flannel VXLAN |
+| 10250 | TCP | Kubelet metrics |
 
 ### Quick Start
 
 ```bash
-# Run a container (works on any node)
-ssh admin@node1.local "docker run --rm alpine echo 'Hello from the cluster!'"
+# Check cluster status (from any node)
+ssh admin@node1.local "kubectl get nodes"
 
-# Check container runtime
-ssh admin@node1.local "podman --version"
-# podman version 5.4.1
+# Check all pods
+ssh admin@node1.local "kubectl get pods -A"
+
+# Deploy a simple workload
+ssh admin@node1.local "kubectl run nginx --image=nginx:alpine"
 ```
 
-### Basic Container Operations
-
-#### Running Containers
+### Common Commands
 
 ```bash
-# Simple one-off container
-podman run --rm alpine cat /etc/os-release
+# Cluster status
+kubectl get nodes -o wide
+kubectl cluster-info
+kubectl get componentstatuses
 
-# Interactive shell
-podman run -it --rm alpine sh
+# View workloads
+kubectl get pods -A                    # All namespaces
+kubectl get deployments
+kubectl get services
 
-# Background container with name
-podman run -d --name my-nginx nginx:alpine
+# Deploy from YAML
+kubectl apply -f deployment.yaml
 
-# With port mapping
-podman run -d -p 8080:80 --name web nginx:alpine
+# Quick test deployment
+kubectl create deployment nginx --image=nginx:alpine --replicas=3
 
-# With resource limits (256MB RAM, 0.5 CPU)
-podman run --rm --memory=256m --cpus=0.5 alpine sh -c 'echo "Limited container"'
-
-# With environment variables
-podman run --rm -e DATABASE_URL="postgres://..." alpine env
-
-# With volume mount
-podman run --rm -v /data:/app/data:ro alpine ls /app/data
-```
-
-#### Managing Containers
-
-```bash
-# List running containers
-podman ps
-
-# List all containers (including stopped)
-podman ps -a
-
-# Stop a container
-podman stop my-nginx
-
-# Remove a container
-podman rm my-nginx
+# Expose as service
+kubectl expose deployment nginx --port=80 --type=NodePort
 
 # View logs
-podman logs my-nginx
-podman logs -f my-nginx  # Follow
+kubectl logs <pod-name>
+kubectl logs -f <pod-name>             # Follow
 
-# Execute command in running container
-podman exec my-nginx nginx -t
+# Execute in pod
+kubectl exec -it <pod-name> -- sh
 
-# Inspect container details
-podman inspect my-nginx
+# Delete resources
+kubectl delete deployment nginx
+kubectl delete pod <pod-name>
 ```
 
-#### Managing Images
-
-```bash
-# List local images
-podman images
-
-# Pull an image
-podman pull nginx:alpine
-
-# Remove an image
-podman rmi nginx:alpine
-
-# Remove all unused images
-podman image prune -a
-
-# Search Docker Hub
-podman search redis
-```
-
-### Building Images with Buildah
-
-Buildah allows building OCI images without a Dockerfile:
-
-```bash
-# Start from a base image
-container=$(buildah from alpine:latest)
-
-# Run commands in the container
-buildah run $container -- apk add --no-cache curl jq
-
-# Set configuration
-buildah config --cmd '/usr/bin/curl --version' $container
-buildah config --env API_KEY=changeme $container
-buildah config --label maintainer="admin@cluster" $container
-
-# Commit to an image
-buildah commit $container my-tools:latest
-
-# Clean up working container
-buildah rm $container
-
-# Use the image
-podman run --rm my-tools:latest
-```
-
-#### Building from Dockerfile
-
-```bash
-# Standard Dockerfile build
-buildah bud -t my-app:latest .
-
-# With build args
-buildah bud --build-arg VERSION=1.0 -t my-app:latest .
-```
-
-### Multi-Container Applications
-
-Use `podman-compose` for applications with multiple services:
+### Example Deployment
 
 ```yaml
-# docker-compose.yml (or compose.yml)
-version: '3'
-services:
-  web:
-    image: nginx:alpine
-    ports:
-      - "8080:80"
-    volumes:
-      - ./html:/usr/share/nginx/html:ro
-    depends_on:
-      - api
-
-  api:
-    image: python:3-alpine
-    command: python -m http.server 5000
-    ports:
-      - "5000:5000"
-
-  redis:
-    image: redis:alpine
+# hello-world.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-world
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: hello-world
+  template:
+    metadata:
+      labels:
+        app: hello-world
+    spec:
+      containers:
+      - name: hello
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        resources:
+          limits:
+            memory: "128Mi"
+            cpu: "250m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-world
+spec:
+  type: NodePort
+  selector:
+    app: hello-world
+  ports:
+  - port: 80
+    targetPort: 80
+    nodePort: 30080
 ```
 
 ```bash
-# Start all services
-podman-compose up -d
+# Deploy
+kubectl apply -f hello-world.yaml
 
-# View status
-podman-compose ps
-
-# View logs
-podman-compose logs -f
-
-# Stop all services
-podman-compose down
-
-# Stop and remove volumes
-podman-compose down -v
+# Access (from any node IP)
+curl http://node1.local:30080
 ```
 
-### Inspecting Remote Images
+### Kubeconfig Access
 
-Use `skopeo` to inspect images without downloading them:
+The kubeconfig is at `/etc/rancher/k3s/k3s.yaml` on each node.
 
 ```bash
-# Inspect image metadata
-skopeo inspect docker://docker.io/library/nginx:alpine
+# Copy kubeconfig to local machine (adjust server address)
+scp -J samuel@desktop admin@node1.local:/etc/rancher/k3s/k3s.yaml ~/.kube/config
 
-# List available tags
-skopeo list-tags docker://docker.io/library/redis
+# Edit to use node1's address
+sed -i '' 's/127.0.0.1/node1.local/' ~/.kube/config
 
-# Copy image between registries
-skopeo copy docker://source-registry/image:tag docker://dest-registry/image:tag
-
-# Copy to local directory (for offline transfer)
-skopeo copy docker://nginx:alpine dir:/tmp/nginx-image
-```
-
-### Cluster-Wide Patterns
-
-#### Run Container on Specific Node
-
-```bash
-# From MacBook - run on node3
-ssh -J samuel@desktop admin@node3.local "podman run --rm nginx:alpine nginx -v"
-```
-
-#### Run Same Container on All Nodes
-
-```bash
-# Parallel execution across cluster
-for i in 1 2 3 4 5 6 7; do
-  ssh -J samuel@desktop admin@node$i.local "podman run --rm alpine hostname" &
-done
-wait
-```
-
-#### Distribute Workload Across Nodes
-
-```bash
-# Process different data on each node
-for i in 1 2 3 4 5 6 7; do
-  ssh -J samuel@desktop admin@node$i.local \
-    "podman run --rm -e SHARD=$i my-processor:latest" &
-done
-wait
-```
-
-#### Check Container Status Cluster-Wide
-
-```bash
-for i in 1 2 3 4 5 6 7; do
-  echo "=== node$i ==="
-  ssh -J samuel@desktop admin@node$i.local "podman ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}'" 2>/dev/null || echo "No containers"
-done
-```
-
-### Long-Running Services
-
-For services that should persist across reboots, create systemd units:
-
-```bash
-# Generate systemd unit from running container
-podman generate systemd --name my-service --files --new
-
-# Or define in configuration.nix (recommended):
-```
-
-```nix
-# In configuration.nix - containerized service
-virtualisation.oci-containers.containers.my-service = {
-  image = "nginx:alpine";
-  ports = [ "8080:80" ];
-  volumes = [ "/data/html:/usr/share/nginx/html:ro" ];
-  extraOptions = [ "--memory=512m" ];
-};
-```
-
-### Storage and Persistence
-
-```bash
-# Named volumes (managed by Podman)
-podman volume create my-data
-podman run -v my-data:/app/data my-app:latest
-
-# List volumes
-podman volume ls
-
-# Inspect volume
-podman volume inspect my-data
-
-# Remove volume
-podman volume rm my-data
-
-# Bind mounts (host directory)
-podman run -v /home/admin/data:/app/data my-app:latest
-```
-
-### Networking
-
-```bash
-# Create custom network
-podman network create my-network
-
-# Run containers on same network (they can reach each other by name)
-podman run -d --name db --network my-network postgres:alpine
-podman run -d --name app --network my-network -e DB_HOST=db my-app:latest
-
-# List networks
-podman network ls
-
-# Inspect network
-podman network inspect my-network
-
-# Remove network
-podman network rm my-network
+# Now use kubectl locally
+kubectl get nodes
 ```
 
 ### Resource Management
 
-```bash
-# Memory limit
-podman run --memory=512m alpine
+Each node has ~3.5GB RAM available for pods (after 512MB reserved for system).
 
-# CPU limit (1.5 cores)
-podman run --cpus=1.5 alpine
-
-# CPU shares (relative weight)
-podman run --cpu-shares=512 alpine
-
-# Combined limits
-podman run --memory=256m --cpus=0.5 --pids-limit=100 alpine
+```yaml
+# Set resource requests and limits
+resources:
+  requests:
+    memory: "64Mi"
+    cpu: "100m"
+  limits:
+    memory: "128Mi"
+    cpu: "250m"
 ```
 
-### Cleanup Commands
+### Storage
 
-```bash
-# Remove all stopped containers
-podman container prune
+K3s includes a local-path provisioner for simple persistent volumes:
 
-# Remove all unused images
-podman image prune -a
-
-# Remove all unused volumes
-podman volume prune
-
-# Remove all unused networks
-podman network prune
-
-# Nuclear option: remove everything
-podman system prune -a --volumes
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi
 ```
 
-### Troubleshooting Containers
+### Troubleshooting K3s
 
 ```bash
-# Check container logs
-podman logs <container>
+# Check K3s service status
+systemctl status k3s
 
-# Follow logs in real-time
-podman logs -f <container>
+# View K3s logs
+journalctl -u k3s -f
 
-# Inspect container config
-podman inspect <container>
+# Check node status
+kubectl describe node node1
 
-# Check resource usage
-podman stats
+# Check pod events
+kubectl describe pod <pod-name>
 
-# Get shell in running container
-podman exec -it <container> sh
+# Check cluster events
+kubectl get events --sort-by='.lastTimestamp'
 
-# Check why container exited
-podman inspect <container> --format '{{.State.ExitCode}} {{.State.Error}}'
+# Restart K3s on a node
+sudo systemctl restart k3s
 ```
 
-### Best Practices for the Cluster
+### Token File
 
-1. **Use Alpine-based images** - Smaller footprint, faster pulls (important with SD card storage)
-
-2. **Set resource limits** - Prevent runaway containers from affecting the node:
-   ```bash
-   podman run --memory=512m --cpus=1 my-app
-   ```
-
-3. **Clean up regularly** - SD card space is limited:
-   ```bash
-   podman system prune -a  # Run periodically
-   ```
-
-4. **Use `--rm` for one-off tasks** - Automatically removes container when done:
-   ```bash
-   podman run --rm alpine echo "done"
-   ```
-
-5. **Prefer bind mounts for data** - Named volumes consume SD card space:
-   ```bash
-   podman run -v /home/admin/data:/data my-app
-   ```
-
-6. **Tag images explicitly** - Avoid `:latest` in production:
-   ```bash
-   podman pull nginx:1.25-alpine  # Not nginx:latest
-   ```
+K3s uses a token file at `/etc/k3s/token` for cluster authentication. This token must be the same on all nodes.
 
 ---
 
@@ -1251,8 +1100,8 @@ This enables:
 | Rollback node | `ssh admin@node1.local sudo nixos-rebuild switch --rollback` |
 | View logs | `ssh admin@node1.local journalctl -f` |
 | Reboot node | `ssh admin@node1.local sudo reboot` |
-| Run container | `ssh admin@node1.local "podman run --rm alpine echo hello"` |
-| List containers | `ssh admin@node1.local podman ps -a` |
-| Build image | `ssh admin@node1.local "buildah bud -t myapp ."` |
-| Cluster containers | `for i in 1..7; do ssh admin@node$i.local podman ps; done` |
-| Clean up images | `ssh admin@node1.local "podman system prune -a"` |
+| K8s nodes | `ssh admin@node1.local kubectl get nodes` |
+| K8s pods | `ssh admin@node1.local kubectl get pods -A` |
+| Deploy app | `ssh admin@node1.local kubectl apply -f app.yaml` |
+| K8s logs | `ssh admin@node1.local kubectl logs <pod>` |
+| K3s status | `ssh admin@node1.local systemctl status k3s` |

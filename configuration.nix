@@ -26,7 +26,7 @@
   # User configuration
   users.users.admin = {
     isNormalUser = true;
-    extraGroups = [ "wheel" "podman" ];
+    extraGroups = [ "wheel" ];
     # SSH public keys for passwordless access
     openssh.authorizedKeys.keys = [
       # MacBook
@@ -73,19 +73,6 @@
     ];
   };
 
-  # Container runtime - Podman (daemonless, lightweight)
-  # Compatible with both Kubernetes (via CRI-O) and Nomad (podman driver)
-  virtualisation.podman = {
-    enable = true;
-    # Create docker alias for CLI compatibility
-    dockerCompat = true;
-    # Enable DNS resolution in containers
-    defaultNetwork.settings.dns_enabled = true;
-  };
-
-  # Enable container support
-  virtualisation.containers.enable = true;
-
   # Basic packages
   environment.systemPackages = with pkgs; [
     vim
@@ -94,10 +81,7 @@
     tmux
     curl
     wget
-    # Container tools
-    podman-compose
-    skopeo      # Container image operations
-    buildah     # Container image building
+    kubectl     # Kubernetes CLI
   ];
 
   # Enable flakes and distributed builds
