@@ -42,7 +42,7 @@ in
         # (3) no external load balancer exists for this home cluster anyway.
         "--disable=traefik"
         "--disable=servicelb"         # No external LB in home network
-        "--flannel-backend=vxlan"     # Lightweight networking
+        "--flannel-backend=host-gw"   # Direct routing (all nodes on same L2 network)
         "--write-kubeconfig-mode=644" # Allow non-root kubeconfig access
       ])
       # TLS SANs only needed on initial server
