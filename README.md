@@ -9,7 +9,7 @@ Reproducible NixOS configuration for a 7-node Odroid C4 cluster running **K3s Ku
 | **Nodes** | 7 × Odroid C4 (ARM64) |
 | **Total CPU** | 28 cores (4 per node) |
 | **Total RAM** | 28 GB (4 GB per node) |
-| **Orchestration** | K3s v1.32 (all nodes as servers) |
+| **Orchestration** | K3s v1.32 (3 servers + 4 agents) |
 | **Container Runtime** | containerd (bundled with K3s) |
 | **Monitoring** | Prometheus + Grafana on node1 |
 
@@ -79,7 +79,7 @@ All system settings are in NixOS modules:
 - SSH key-only authentication
 - `admin` user with passwordless sudo
 - mDNS via Avahi (`nodeX.local`)
-- K3s with all 7 nodes as HA control plane
+- K3s with 3 servers (node1-3) and 4 agents (node4-7)
 - Distributed Nix builds across all nodes
 
 ## Remote Updates

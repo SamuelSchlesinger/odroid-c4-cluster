@@ -297,8 +297,8 @@ users.users.root.openssh.authorizedKeys.keys = [
 | OpenSSH | Remote access | 22 | All nodes |
 | Avahi | mDNS discovery | 5353/udp | All nodes |
 | node_exporter | System metrics | 9100 | All nodes |
-| K3s API | Kubernetes API server | 6443 | All nodes |
-| etcd | K3s cluster state | 2379-2380 | All nodes |
+| K3s API | Kubernetes API server | 6443 | Server nodes (1-3) |
+| etcd | K3s cluster state | 2379-2380 | Server nodes (1-3) |
 | Prometheus | Metrics aggregation | 9090 | node1 |
 | Grafana | Dashboards | 3000 | node1 |
 
@@ -328,10 +328,11 @@ All nodes run **K3s**, a lightweight Kubernetes distribution:
 | **CoreDNS** | Service discovery |
 
 **Cluster topology:**
-- All 7 nodes run as K3s servers (control plane + workloads)
+- 3 server nodes (node1-3): control plane + etcd + workloads
+- 4 agent nodes (node4-7): workloads only
 - node1 is the initial server (bootstrap node)
-- Tolerates loss of up to 3 nodes (4-node quorum)
-- ~50MB RAM overhead per node
+- Tolerates loss of 1 server node (2-node quorum for etcd)
+- ~300-400MB RAM overhead on servers, minimal on agents
 
 ### Security Configuration
 
@@ -657,7 +658,7 @@ nix build nixpkgs#hello -v 2>&1 | grep "building.*on"
 
 ## Kubernetes (K3s)
 
-The cluster runs K3s, a lightweight Kubernetes distribution. All 7 nodes operate as servers, providing a highly available control plane that can tolerate up to 3 node failures.
+The cluster runs K3s, a lightweight Kubernetes distribution. 3 server nodes (node1-3) provide an HA control plane, while 4 agent nodes (node4-7) run workloads. This topology tolerates 1 server failure while keeping etcd responsive.
 
 ### Architecture
 
@@ -667,30 +668,33 @@ The cluster runs K3s, a lightweight Kubernetes distribution. All 7 nodes operate
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
 │   ┌─────────────────────────────────────────────────────────────────┐   │
-│   │                    K3s Server Cluster (HA)                       │   │
+│   │              Server Nodes (Control Plane + etcd)                 │   │
 │   │                                                                  │   │
-│   │   node1        node2        node3        node4                  │   │
-│   │   (init)                                                         │   │
-│   │    ┌──┐        ┌──┐        ┌──┐        ┌──┐                     │   │
-│   │    │S │◄──────►│S │◄──────►│S │◄──────►│S │                     │   │
-│   │    └──┘        └──┘        └──┘        └──┘                     │   │
-│   │      ▲           ▲           ▲           ▲                       │   │
-│   │      │           │           │           │                       │   │
-│   │      ▼           ▼           ▼           ▼                       │   │
-│   │   node5        node6        node7                               │   │
-│   │    ┌──┐        ┌──┐        ┌──┐                                 │   │
-│   │    │S │◄──────►│S │◄──────►│S │                                 │   │
-│   │    └──┘        └──┘        └──┘                                 │   │
+│   │   node1 (init)       node2            node3                     │   │
+│   │      ┌──┐             ┌──┐             ┌──┐                     │   │
+│   │      │S │◄───────────►│S │◄───────────►│S │                     │   │
+│   │      └──┘             └──┘             └──┘                     │   │
 │   │                                                                  │   │
 │   │   S = Server (API + etcd + kubelet)                             │   │
-│   │   All nodes can run workloads                                    │   │
-│   │   Quorum: 4 nodes (tolerates 3 failures)                        │   │
+│   │   Quorum: 2 nodes (tolerates 1 failure)                         │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                              │                                           │
+│                    Kubernetes API (6443)                                │
+│                              │                                           │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │                    Agent Nodes (Workers)                         │   │
 │   │                                                                  │   │
+│   │   node4            node5            node6            node7      │   │
+│   │    ┌──┐             ┌──┐             ┌──┐             ┌──┐      │   │
+│   │    │A │             │A │             │A │             │A │      │   │
+│   │    └──┘             └──┘             └──┘             └──┘      │   │
+│   │                                                                  │   │
+│   │   A = Agent (kubelet only, runs workloads)                      │   │
 │   └─────────────────────────────────────────────────────────────────┘   │
 │                                                                          │
 │   Networking: Flannel VXLAN (port 8472/udp)                             │
 │   DNS: CoreDNS (cluster.local)                                          │
-│   API: https://any-node:6443                                            │
+│   API: https://node1-3:6443                                             │
 │                                                                          │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -728,13 +732,13 @@ enableK3s = true;   # Set to false to disable the entire K3s cluster
 
 ### Ports
 
-| Port | Protocol | Purpose |
-|------|----------|---------|
-| 6443 | TCP | Kubernetes API server |
-| 2379 | TCP | etcd client |
-| 2380 | TCP | etcd peer |
-| 8472 | UDP | Flannel VXLAN |
-| 10250 | TCP | Kubelet metrics |
+| Port | Protocol | Purpose | Nodes |
+|------|----------|---------|-------|
+| 6443 | TCP | Kubernetes API server | Servers (1-3) |
+| 2379 | TCP | etcd client | Servers (1-3) |
+| 2380 | TCP | etcd peer | Servers (1-3) |
+| 8472 | UDP | Flannel VXLAN | All |
+| 10250 | TCP | Kubelet metrics | All |
 
 ### Quick Start
 
@@ -1201,8 +1205,8 @@ nix eval nixpkgs#k3s.version
 ```
 
 K3s is designed for seamless upgrades. The cluster remains available during rolling updates because:
-- All 7 nodes are control plane servers
-- Quorum only requires 4 nodes
+- 3 server nodes provide HA (quorum requires 2)
+- Agent nodes can be updated independently
 - Nodes rejoin automatically after restart
 
 **Important**: Always upgrade all nodes together. Mixed K3s versions can cause issues.
