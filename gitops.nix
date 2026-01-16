@@ -91,6 +91,7 @@ in
       Environment = [
         "HOME=/root"
         "SSH_AUTH_SOCK="
+        "GIT_SSH_COMMAND=ssh -i /root/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new"
       ];
 
       # Logging
