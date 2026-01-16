@@ -21,12 +21,21 @@ in
     clusterInit = isInitialServer;
     serverAddr = lib.mkIf (!isInitialServer) "https://${initialServer}:6443";
 
-    extraFlags = toString [
+    extraFlags = toString ([
       "--disable=traefik"           # Skip ingress controller
       "--disable=servicelb"         # Skip load balancer
       "--flannel-backend=vxlan"     # Lightweight networking
       "--write-kubeconfig-mode=644" # Allow non-root kubeconfig access
-    ];
+    ] ++ (if isInitialServer then [
+      # TLS SANs for mDNS hostnames (required for other nodes to join via .local)
+      "--tls-san=node1.local"
+      "--tls-san=node2.local"
+      "--tls-san=node3.local"
+      "--tls-san=node4.local"
+      "--tls-san=node5.local"
+      "--tls-san=node6.local"
+      "--tls-san=node7.local"
+    ] else []));
   };
 
   # Ensure token directory exists
