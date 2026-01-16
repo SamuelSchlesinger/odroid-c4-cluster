@@ -1,222 +1,294 @@
-# Kubernetes Examples
+# Kubernetes Tutorial: Deploying Your First Application
 
-Hands-on tutorials for deploying and managing applications on the Odroid C4 K3s cluster.
+A hands-on walkthrough of deploying and exploring an application on the Odroid C4 K3s cluster.
+
+## What You'll Learn
+
+- How Kubernetes organizes applications (namespaces, deployments, services)
+- How to deploy a multi-replica application
+- How load balancing distributes traffic across pods
+- How to inspect, scale, and manage running workloads
+- The difference between connection-level and request-level load balancing
 
 ## Prerequisites
 
-Access to the cluster via SSH:
+SSH access to the cluster:
 ```bash
-# From desktop (local network)
+# From the local network
 ssh admin@node1.local
 
-# From MacBook (via jump host)
+# From remote (via jump host)
 ssh -J samuel@desktop admin@node1.local
 ```
 
-## Example 1: whoami-app
+## The Application: whoami
 
-A simple web application that returns information about the pod serving each request. Demonstrates:
-- Deployments with multiple replicas
-- Services and load balancing
-- Scaling applications
-- Viewing logs
-- Executing commands in pods
+We'll deploy `traefik/whoami`, a tiny web server that returns information about the pod handling each request. This makes it easy to observe Kubernetes behavior.
 
-### Deploy the Application
+## Step 1: Understanding the Manifest
 
+The manifest file `whoami-app.yaml` defines three Kubernetes resources:
+
+### Namespace
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: examples
+```
+Namespaces isolate resources. We create an `examples` namespace to keep tutorial workloads separate from system components.
+
+### Deployment
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: whoami
+  namespace: examples
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: whoami
+  template:
+    spec:
+      containers:
+        - name: whoami
+          image: traefik/whoami:latest
+          ports:
+            - containerPort: 80
+```
+A Deployment manages a set of identical pods. Key points:
+- `replicas: 3` - Kubernetes maintains exactly 3 running instances
+- `selector` - How the deployment finds its pods (by label `app: whoami`)
+- `template` - The pod specification: what container image to run, what ports to expose
+
+### Service
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: whoami
+  namespace: examples
+spec:
+  type: NodePort
+  selector:
+    app: whoami
+  ports:
+    - port: 80
+      nodePort: 30080
+```
+A Service provides a stable network endpoint for pods. Key points:
+- `type: NodePort` - Exposes the service on every node at port 30080
+- `selector: app: whoami` - Routes traffic to pods with this label
+- Kubernetes automatically load-balances across all matching pods
+
+## Step 2: Deploy the Application
+
+Apply the manifest:
 ```bash
-# Apply the manifest
 kubectl apply -f https://raw.githubusercontent.com/SamuelSchlesinger/odroid-c4-cluster/main/k8s/examples/whoami-app.yaml
-
-# Or if you have the file locally:
-kubectl apply -f /path/to/whoami-app.yaml
 ```
 
-### Verify Deployment
+Output:
+```
+namespace/examples created
+deployment.apps/whoami created
+service/whoami created
+```
 
+## Step 3: Verify the Deployment
+
+Check that pods are running:
 ```bash
-# Check the namespace was created
-kubectl get namespaces
-
-# Check the deployment status
-kubectl get deployment -n examples
-
-# Watch pods come up (Ctrl+C to exit)
-kubectl get pods -n examples -w
-
-# See which nodes the pods are scheduled on
 kubectl get pods -n examples -o wide
 ```
 
-### Access the Application
-
-The service is exposed on NodePort 30080. Access it from any node:
-
-```bash
-# From within the cluster
-curl http://localhost:30080
-
-# From the desktop (any node works)
-curl http://node1.local:30080
-curl http://node3.local:30080
-
-# From MacBook via SSH
-ssh -J samuel@desktop admin@node1.local "curl -s http://localhost:30080"
+Output:
+```
+NAME                      READY   STATUS    RESTARTS   AGE   IP          NODE
+whoami-6f8c84d46c-fkvsx   1/1     Running   0          39s   10.42.3.2   node5
+whoami-6f8c84d46c-fnv8b   1/1     Running   0          39s   10.42.4.2   node2
+whoami-6f8c84d46c-j7h2f   1/1     Running   0          39s   10.42.2.2   node6
 ```
 
-### Observe Load Balancing
+Notice:
+- 3 pods are running (matching `replicas: 3`)
+- Each pod has a unique name suffix
+- Pods are distributed across different nodes (node5, node2, node6)
+- Each pod has its own cluster IP (10.42.x.x)
 
-Run multiple requests and watch the `Hostname` field change as different pods serve each request:
+Check the service:
+```bash
+kubectl get svc -n examples
+```
+
+Output:
+```
+NAME     TYPE       CLUSTER-IP      EXTERNAL-IP   PORT(S)        AGE
+whoami   NodePort   10.43.131.180   <none>        80:30080/TCP   39s
+```
+
+The service has a stable ClusterIP (10.43.131.180) and is exposed externally on port 30080.
+
+## Step 4: Access the Application
+
+The NodePort service makes the app accessible on port 30080 of any node:
 
 ```bash
-# Make 10 requests and show which pod handled each
+curl http://node1.local:30080
+```
+
+Output:
+```
+Hostname: whoami-6f8c84d46c-fkvsx
+IP: 127.0.0.1
+IP: ::1
+IP: 10.42.3.2
+RemoteAddr: 10.42.0.0:37397
+GET / HTTP/1.1
+Host: localhost:30080
+User-Agent: curl/8.14.1
+Accept: */*
+```
+
+The response shows:
+- `Hostname` - The pod that handled this request
+- `IP` - The pod's network interfaces
+- `RemoteAddr` - Where the request came from (the node's kube-proxy)
+- HTTP headers from your request
+
+## Step 5: Observe Load Balancing
+
+Run multiple requests:
+```bash
 for i in $(seq 1 10); do
   curl -s http://localhost:30080 | grep Hostname
 done
 ```
 
-Expected output shows requests distributed across replicas:
+Output:
 ```
-Hostname: whoami-7d4b8c9f5-abc12
-Hostname: whoami-7d4b8c9f5-xyz34
-Hostname: whoami-7d4b8c9f5-def56
-Hostname: whoami-7d4b8c9f5-abc12
-...
+Hostname: whoami-6f8c84d46c-j7h2f
+Hostname: whoami-6f8c84d46c-j7h2f
+Hostname: whoami-6f8c84d46c-fnv8b
+Hostname: whoami-6f8c84d46c-fkvsx
+Hostname: whoami-6f8c84d46c-fnv8b
+Hostname: whoami-6f8c84d46c-fnv8b
+Hostname: whoami-6f8c84d46c-j7h2f
+Hostname: whoami-6f8c84d46c-fkvsx
+Hostname: whoami-6f8c84d46c-fkvsx
+Hostname: whoami-6f8c84d46c-fnv8b
 ```
 
-### Explore the Pods
+Requests are distributed across all three pods. This is Kubernetes load balancing in action.
 
+### Browser vs curl: A Subtlety
+
+If you access the app from a web browser and refresh repeatedly, you'll notice it always shows the same hostname. Why?
+
+**The answer: connection reuse.**
+
+Browsers use HTTP keep-alive, maintaining a persistent TCP connection for multiple requests. Kubernetes load-balances at the *connection* level, not the *request* level. Once a connection is established to a pod, all requests on that connection go to the same pod.
+
+curl, by default, opens a new connection for each request, so you see different pods.
+
+To see different pods from a browser:
+- Open multiple incognito/private windows (each gets a new connection)
+- Close and reopen the tab
+- Wait for the keep-alive timeout
+
+This is important to understand: Kubernetes Services provide connection-level load balancing, not HTTP request-level load balancing. For request-level distribution, you'd need an ingress controller or service mesh.
+
+## Step 6: Explore the Pods
+
+### View logs
 ```bash
-# List all pods with their IPs
-kubectl get pods -n examples -o wide
+kubectl logs -n examples -l app=whoami --tail=10
+```
 
-# Describe a pod (detailed info, events, conditions)
-kubectl describe pod -n examples -l app=whoami | head -50
-
-# View logs from a specific pod
-kubectl logs -n examples -l app=whoami --tail=20
-
-# Follow logs in real-time (Ctrl+C to exit)
-kubectl logs -n examples -l app=whoami -f
-
-# Execute a command inside a pod
+### Execute commands inside a pod
+```bash
 kubectl exec -n examples deploy/whoami -- cat /etc/os-release
+```
 
-# Get an interactive shell
+### Get an interactive shell
+```bash
 kubectl exec -n examples -it deploy/whoami -- /bin/sh
 ```
 
-### Scale the Application
-
+### Check resource usage
 ```bash
-# Scale up to 5 replicas
+kubectl top pods -n examples
+```
+
+## Step 7: Scale the Application
+
+Scale up to 5 replicas:
+```bash
 kubectl scale deployment -n examples whoami --replicas=5
-
-# Watch pods come up
-kubectl get pods -n examples -w
-
-# Scale down to 2 replicas
-kubectl scale deployment -n examples whoami --replicas=2
-
-# Verify
 kubectl get pods -n examples
 ```
 
-### View Resource Usage
-
+Scale down to 2:
 ```bash
-# CPU and memory usage per pod
-kubectl top pods -n examples
-
-# Across all nodes
-kubectl top nodes
+kubectl scale deployment -n examples whoami --replicas=2
+kubectl get pods -n examples
 ```
 
-### Update the Application
+Kubernetes automatically terminates excess pods or creates new ones to match the desired count.
 
+## Step 8: Clean Up
+
+Delete everything in the namespace:
 ```bash
-# Change the image (triggers rolling update)
-kubectl set image deployment/whoami -n examples whoami=traefik/whoami:v1.10
-
-# Watch the rollout
-kubectl rollout status deployment/whoami -n examples
-
-# View rollout history
-kubectl rollout history deployment/whoami -n examples
-
-# Rollback if needed
-kubectl rollout undo deployment/whoami -n examples
-```
-
-### Inspect the Service
-
-```bash
-# View service details
-kubectl get service -n examples
-
-# See endpoints (pod IPs behind the service)
-kubectl get endpoints -n examples
-
-# Describe service
-kubectl describe service whoami -n examples
-```
-
-### Debug Networking
-
-```bash
-# Test DNS resolution from within a pod
-kubectl exec -n examples deploy/whoami -- nslookup whoami.examples.svc.cluster.local
-
-# Test connectivity to another pod
-kubectl exec -n examples deploy/whoami -- wget -qO- http://whoami.examples.svc.cluster.local
-```
-
-### Clean Up
-
-```bash
-# Delete everything in the examples namespace
 kubectl delete namespace examples
-
-# Or delete just the application
-kubectl delete -f whoami-app.yaml
 ```
 
-## Tips
+This removes the namespace and all resources within it (deployment, service, pods).
 
-### Quick Access Aliases
+## Key Concepts Recap
 
-Add to your `.bashrc` on the nodes:
+| Concept | Purpose |
+|---------|---------|
+| **Namespace** | Isolates resources into logical groups |
+| **Deployment** | Manages a set of identical pods, handles scaling and updates |
+| **Pod** | The smallest deployable unit; one or more containers |
+| **Service** | Stable network endpoint that load-balances across pods |
+| **NodePort** | Exposes a service on a static port on every node |
+| **Labels** | Key-value pairs used to select and organize resources |
+
+## Common Commands Reference
+
 ```bash
-alias k='kubectl'
-alias kge='kubectl get -n examples'
-alias kgp='kubectl get pods -n examples'
-```
+# List resources
+kubectl get pods -n examples
+kubectl get svc -n examples
+kubectl get all -n examples
 
-### Common Troubleshooting
-
-```bash
-# Pod stuck in Pending? Check events:
+# Detailed info
 kubectl describe pod -n examples <pod-name>
+kubectl describe svc -n examples whoami
 
-# Pod in CrashLoopBackOff? Check logs:
-kubectl logs -n examples <pod-name> --previous
+# Logs
+kubectl logs -n examples <pod-name>
+kubectl logs -n examples -l app=whoami -f  # follow all
 
-# Can't pull image? Check node has network:
-kubectl get events -n examples --sort-by='.lastTimestamp'
+# Execute
+kubectl exec -n examples <pod-name> -- <command>
+kubectl exec -n examples -it <pod-name> -- /bin/sh
+
+# Scale
+kubectl scale deployment -n examples whoami --replicas=N
+
+# Delete
+kubectl delete namespace examples
 ```
-
-### Useful Flags
-
-- `-o wide` - Show more columns (node, IP, etc.)
-- `-o yaml` - Full YAML output
-- `-w` - Watch for changes
-- `--all-namespaces` or `-A` - All namespaces
-- `-l app=whoami` - Filter by label
 
 ## Next Steps
 
-After completing this tutorial, try:
-1. Creating your own deployment from scratch
-2. Adding a ConfigMap or Secret
-3. Setting up a horizontal pod autoscaler
-4. Deploying a stateful application with persistent storage
+Now that you understand the basics:
+1. Try modifying the manifest (change replicas, add resource limits)
+2. Create a second service and observe internal DNS (`whoami.examples.svc.cluster.local`)
+3. Add a ConfigMap to inject configuration into pods
+4. Explore deployments with rolling updates (`kubectl set image`)
