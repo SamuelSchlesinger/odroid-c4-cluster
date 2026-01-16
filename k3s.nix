@@ -22,8 +22,12 @@ in
     serverAddr = lib.mkIf (!isInitialServer) "https://${initialServer}:6443";
 
     extraFlags = toString ([
-      "--disable=traefik"           # Skip ingress controller
-      "--disable=servicelb"         # Skip load balancer
+      # Traefik is a reverse proxy/ingress controller that routes external HTTP
+      # traffic to pods. Disabled because: (1) it uses ~100MB RAM per node which
+      # is significant on 4GB ARM boards, (2) we use NodePort for simplicity,
+      # (3) no external load balancer exists for this home cluster anyway.
+      "--disable=traefik"
+      "--disable=servicelb"         # No external LB in home network
       "--flannel-backend=vxlan"     # Lightweight networking
       "--write-kubeconfig-mode=644" # Allow non-root kubeconfig access
     ] ++ (if isInitialServer then [
