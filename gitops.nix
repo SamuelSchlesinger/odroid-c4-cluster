@@ -4,12 +4,14 @@
 let
   hostname = config.networking.hostName;
   flakeUrl = "git+ssh://git@github.com/SamuelSchlesinger/odroid-c4-cluster";
+  revisionFile = "/var/lib/auto-deploy/revision";
 
   # Script to check for updates and deploy
   autoDeployScript = pkgs.writeShellScript "auto-deploy" ''
     set -euo pipefail
 
     LOCK_FILE="/var/run/auto-deploy.lock"
+    REVISION_FILE="${revisionFile}"
     LOG_PREFIX="[auto-deploy]"
 
     log() {
@@ -30,7 +32,7 @@ let
     log "Checking for updates..."
 
     # Get current system's flake revision
-    CURRENT_REV=$(${pkgs.coreutils}/bin/cat /run/current-system/flake-revision 2>/dev/null || echo "unknown")
+    CURRENT_REV=$(${pkgs.coreutils}/bin/cat "$REVISION_FILE" 2>/dev/null || echo "unknown")
     log "Current revision: $CURRENT_REV"
 
     # Fetch latest revision from GitHub (using root's SSH key)
@@ -58,7 +60,8 @@ let
       log "Deployment successful!"
 
       # Record the deployed revision
-      echo "$LATEST_REV" > /run/current-system/flake-revision
+      ${pkgs.coreutils}/bin/mkdir -p "$(dirname "$REVISION_FILE")"
+      echo "$LATEST_REV" > "$REVISION_FILE"
     else
       log "Deployment FAILED!"
       exit 1
@@ -66,12 +69,10 @@ let
   '';
 in
 {
-  # Store the current flake revision on deployment
-  system.activationScripts.recordFlakeRevision = ''
-    if [ -n "''${FLAKE_REV:-}" ]; then
-      echo "$FLAKE_REV" > /run/current-system/flake-revision
-    fi
-  '';
+  # Ensure the auto-deploy state directory exists
+  systemd.tmpfiles.rules = [
+    "d /var/lib/auto-deploy 0755 root root -"
+  ];
 
   # Auto-deploy service
   systemd.services.auto-deploy = {
