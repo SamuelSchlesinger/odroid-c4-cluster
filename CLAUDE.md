@@ -12,6 +12,12 @@ This repository contains the **NixOS configuration for a 7-node Odroid C4 cluste
 
 | Task | Command |
 |------|---------|
+| **Kubernetes** | |
+| Check K8s nodes | `ssh admin@node1.local "kubectl get nodes"` |
+| Check all pods | `ssh admin@node1.local "kubectl get pods -A"` |
+| Deploy workload | `ssh admin@node1.local "kubectl apply -f app.yaml"` |
+| K3s service status | `ssh admin@node1.local "systemctl status k3s"` |
+| **NixOS** | |
 | Check cluster health | See [Health Check](#health-check) below |
 | SSH to node | `ssh admin@node1.local` (or via jump host) |
 | Build image | On desktop: `nix build .#node1-sdImage` |
@@ -112,11 +118,81 @@ node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100
 node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} * 100
 ```
 
+## Kubernetes (K3s)
+
+The cluster runs K3s with all 7 nodes as servers (HA control plane). This provides fault tolerance for up to 3 node failures.
+
+### Architecture
+
+- **Control plane**: All 7 nodes (etcd + API server)
+- **Runtime**: containerd (bundled with K3s)
+- **Networking**: Flannel VXLAN
+- **Initial server**: node1 (has `--cluster-init`)
+- **Token file**: `/etc/k3s/token` on all nodes
+
+### Common K3s Operations
+
+```bash
+# Cluster status
+kubectl get nodes -o wide
+kubectl cluster-info
+
+# View workloads
+kubectl get pods -A
+kubectl get deployments
+kubectl get services
+
+# Deploy application
+kubectl apply -f deployment.yaml
+
+# Quick test deployment
+kubectl create deployment nginx --image=nginx:alpine --replicas=3
+kubectl expose deployment nginx --port=80 --type=NodePort
+
+# View logs
+kubectl logs <pod-name>
+kubectl logs -f <pod-name>  # Follow
+
+# Execute in pod
+kubectl exec -it <pod-name> -- sh
+
+# Delete resources
+kubectl delete deployment nginx
+```
+
+### K3s Troubleshooting
+
+```bash
+# Check K3s service
+systemctl status k3s
+journalctl -u k3s -f
+
+# Check node status
+kubectl describe node node1
+
+# Restart K3s on a node
+sudo systemctl restart k3s
+
+# Check K3s token (must match on all nodes)
+sudo cat /etc/k3s/token
+```
+
+### Kubeconfig Access
+
+The kubeconfig is at `/etc/rancher/k3s/k3s.yaml` on each node:
+
+```bash
+# Copy to local machine
+scp -J samuel@desktop admin@node1.local:/etc/rancher/k3s/k3s.yaml ~/.kube/config
+# Edit server address: change 127.0.0.1 to node1.local
+```
+
 ## Key Files
 
 | File | Purpose | Edit Frequency |
 |------|---------|----------------|
-| `configuration.nix` | All system settings (users, packages, services) | Often |
+| `configuration.nix` | Base system settings (users, packages) | Often |
+| `k3s.nix` | K3s Kubernetes cluster configuration | Rarely |
 | `monitoring.nix` | Prometheus + Grafana for node1 | Rarely |
 | `flake.nix` | Node definitions, build outputs | Rarely |
 | `flake.lock` | Pinned nixpkgs version | Only when updating packages |
@@ -323,6 +399,8 @@ nix build nixpkgs#hello --max-jobs 0
 | RAM | 4GB per node (28GB total) |
 | OS | NixOS 25.05 |
 | Kernel | 6.6 LTS |
+| Orchestration | K3s v1.32 (all nodes as servers) |
+| Container Runtime | containerd (bundled with K3s) |
 | Network | Gigabit Ethernet, DHCP, mDNS |
 | SSH User | `admin` (passwordless sudo) |
 

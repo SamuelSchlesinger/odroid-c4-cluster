@@ -1,8 +1,35 @@
 # NixOS on Odroid C4 Cluster
 
-Reproducible NixOS configuration for a 7-node Odroid C4 cluster using Tow-Boot.
+Reproducible NixOS configuration for a 7-node Odroid C4 cluster running **K3s Kubernetes**.
 
-## Quick Start
+## Cluster Overview
+
+| Resource | Value |
+|----------|-------|
+| **Nodes** | 7 × Odroid C4 (ARM64) |
+| **Total CPU** | 28 cores (4 per node) |
+| **Total RAM** | 28 GB (4 GB per node) |
+| **Orchestration** | K3s v1.32 (all nodes as servers) |
+| **Container Runtime** | containerd (bundled with K3s) |
+| **Monitoring** | Prometheus + Grafana on node1 |
+
+## Kubernetes Quick Start
+
+```bash
+# Check cluster status (from any node)
+ssh admin@node1.local "kubectl get nodes"
+
+# Deploy a workload
+ssh admin@node1.local "kubectl create deployment nginx --image=nginx:alpine --replicas=3"
+
+# Expose as NodePort service
+ssh admin@node1.local "kubectl expose deployment nginx --port=80 --type=NodePort"
+
+# Access via any node IP on the assigned port
+curl http://node1.local:<nodeport>
+```
+
+## Quick Start (Initial Setup)
 
 ### 1. Build images on desktop (Linux)
 
@@ -40,12 +67,20 @@ ssh admin@node2.local
 
 ## Configuration
 
-All system settings are in `configuration.nix`:
+All system settings are in NixOS modules:
+
+| File | Purpose |
+|------|---------|
+| `configuration.nix` | Base system (SSH, users, packages, Nix settings) |
+| `k3s.nix` | K3s Kubernetes cluster configuration |
+| `monitoring.nix` | Prometheus + Grafana (node1 only) |
+
+**Key features:**
 - SSH key-only authentication
 - `admin` user with passwordless sudo
 - mDNS via Avahi (`nodeX.local`)
-- Distributed builds across all 7 nodes
-- Official cache.nixos.org as substituter
+- K3s with all 7 nodes as HA control plane
+- Distributed Nix builds across all nodes
 
 ## Remote Updates
 
@@ -77,7 +112,9 @@ See `configuration.nix:99-112` for the setup:
 odroid-c4/
 ├── flake.nix                    # Nix flake defining all 7 nodes
 ├── flake.lock                   # Pinned nixpkgs version
-├── configuration.nix            # System config (SSH, users, packages, builds)
+├── configuration.nix            # Base system config (SSH, users, packages)
+├── k3s.nix                      # K3s Kubernetes cluster configuration
+├── monitoring.nix               # Prometheus + Grafana (node1 only)
 ├── hardware-configuration.nix   # Odroid C4 hardware + Tow-Boot boot
 ├── flash-with-towboot.sh        # Flash script for macOS
 ├── setup-distributed-builds.sh  # Set up root SSH + signing keys
