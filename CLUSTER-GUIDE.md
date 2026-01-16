@@ -318,8 +318,69 @@ environment.systemPackages = with pkgs; [
 |---------|-------|-------|
 | SSH root login | Keys only | `PermitRootLogin = "prohibit-password"` (for distributed builds) |
 | Password auth | Disabled | SSH keys only |
-| Firewall | Enabled | Only port 22 open |
+| Firewall | Enabled | Ports 22, 9100 on all; 9090, 3000 on node1 |
 | Sudo | Passwordless | For `admin` user via `wheel` group |
+
+### Monitoring Stack
+
+The cluster runs a Prometheus + Grafana monitoring stack:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     Monitoring Architecture                      │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌─────────────────── node1 (monitoring hub) ─────────────────┐ │
+│  │                                                             │ │
+│  │  ┌─────────────┐     ┌────────────┐     ┌──────────────┐  │ │
+│  │  │ Prometheus  │────▶│  Grafana   │     │ node_exporter│  │ │
+│  │  │   :9090     │     │   :3000    │     │    :9100     │  │ │
+│  │  └──────┬──────┘     └────────────┘     └──────────────┘  │ │
+│  │         │ scrapes every 15s                                │ │
+│  └─────────┼──────────────────────────────────────────────────┘ │
+│            │                                                     │
+│            ▼ scrapes metrics from all nodes                      │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  │
+│  │ node2           │  │ node3           │  │ node4-7         │  │
+│  │ node_exporter   │  │ node_exporter   │  │ node_exporter   │  │
+│  │ :9100           │  │ :9100           │  │ :9100           │  │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘  │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Access via go-links** (see below) or directly:
+- Grafana: `http://node1.local:3000` (admin/admin)
+- Prometheus: `http://node1.local:9090`
+- Node metrics: `http://nodeX.local:9100/metrics`
+
+**Configuration files**:
+- `monitoring.nix` - Prometheus and Grafana (included only for node1 in flake.nix)
+- `configuration.nix` - node_exporter (all nodes)
+
+**Recommended Grafana dashboard**: Import dashboard ID `1860` (Node Exporter Full) for comprehensive node metrics.
+
+### Go-Links
+
+Short URLs for cluster services, accessible via Tailscale from anywhere:
+
+| Link | Destination |
+|------|-------------|
+| `go/` | Index page showing all available links |
+| `go/grafana` | Grafana dashboards (node1.local:3000) |
+| `go/prometheus` | Prometheus UI (node1.local:9090) |
+| `go/prom` | Prometheus (short alias) |
+| `go/node1` - `go/node7` | Node metrics (nodeX.local:9100) |
+
+**How it works**:
+1. nginx on desktop (`samuel@desktop`) handles redirects
+2. Config: `/etc/nginx/sites-enabled/go-links`
+3. Clients resolve `go` via `/etc/hosts` → desktop's Tailscale IP (100.123.199.53)
+
+**To add go-links to a new machine**:
+```bash
+sudo sh -c 'echo "100.123.199.53 go" >> /etc/hosts'
+```
 
 ---
 
@@ -330,6 +391,7 @@ odroid-c4-cluster/
 ├── flake.nix                 # Nix flake: defines all 7 nodes
 ├── flake.lock                # Pinned dependencies (nixpkgs version)
 ├── configuration.nix         # Shared NixOS config for all nodes
+├── monitoring.nix            # Prometheus + Grafana (node1 only)
 ├── hardware-configuration.nix # Odroid C4 hardware settings
 ├── flash-with-towboot.sh     # SD card flashing script (macOS)
 ├── setup-distributed-builds.sh # Root SSH + cache key distribution
@@ -418,17 +480,19 @@ diskutil list
 
 Nodes can pull configuration directly from GitHub using the root SSH key (configured as a deploy key on the repo).
 
+**Important**: Use `--refresh` to ensure nodes fetch the latest commit (Nix caches flake references).
+
 ```bash
 # Single node (from desktop)
-ssh admin@node1.local "sudo nixos-rebuild switch --flake 'git+ssh://git@github.com/SamuelSchlesinger/odroid-c4-cluster#node1'"
+ssh admin@node1.local "sudo nixos-rebuild switch --flake 'git+ssh://git@github.com/SamuelSchlesinger/odroid-c4-cluster#node1' --refresh"
 
 # Single node (from MacBook via jump host)
-ssh -J samuel@desktop admin@node1.local "sudo nixos-rebuild switch --flake 'git+ssh://git@github.com/SamuelSchlesinger/odroid-c4-cluster#node1'"
+ssh -J samuel@desktop admin@node1.local "sudo nixos-rebuild switch --flake 'git+ssh://git@github.com/SamuelSchlesinger/odroid-c4-cluster#node1' --refresh"
 
 # All nodes in parallel (from desktop)
 for i in 1 2 3 4 5 6 7; do
   echo "=== Deploying to node$i ==="
-  ssh admin@node$i.local "sudo nixos-rebuild switch --flake 'git+ssh://git@github.com/SamuelSchlesinger/odroid-c4-cluster#node$i'" &
+  ssh admin@node$i.local "sudo nixos-rebuild switch --flake 'git+ssh://git@github.com/SamuelSchlesinger/odroid-c4-cluster#node$i' --refresh" &
 done
 wait
 ```
