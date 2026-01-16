@@ -81,6 +81,9 @@ in
     after = [ "network-online.target" ];
     wants = [ "network-online.target" ];
 
+    # Add git and openssh to PATH for nix flake fetching
+    path = [ pkgs.git pkgs.openssh ];
+
     serviceConfig = {
       Type = "oneshot";
       ExecStart = autoDeployScript;
