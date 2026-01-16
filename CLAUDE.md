@@ -23,8 +23,9 @@ This repository contains the **NixOS configuration for a 7-node Odroid C4 cluste
 | Check cluster health | See [Health Check](#health-check) below |
 | SSH to node | `ssh admin@node1.local` (or via jump host) |
 | Build image | On desktop: `nix build .#node1-sdImage` |
-| Deploy to node | `ssh admin@node1.local "sudo nixos-rebuild switch --flake 'git+ssh://git@github.com/SamuelSchlesinger/odroid-c4-cluster#node1' --refresh"` |
-| Deploy all nodes | See [Deploying to All Nodes](#deploying-to-all-nodes) |
+| **Deploy changes** | `git commit && git push` (GitOps auto-deploys within ~20s) |
+| Manual deploy | `ssh admin@node1.local "sudo systemctl start auto-deploy"` |
+| Check GitOps status | `ssh admin@node1.local "journalctl -u auto-deploy -n 20"` |
 | Update packages | On desktop: `nix flake update && git add flake.lock && git commit && git push` |
 | Sync repo | `git pull origin main` / `git push origin main` |
 
@@ -118,6 +119,59 @@ node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100
 
 # Disk space remaining
 node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} * 100
+```
+
+## GitOps Auto-Deploy
+
+The cluster automatically deploys changes when you push to GitHub. No manual deployment needed.
+
+### How It Works
+
+1. Each node runs a systemd timer that checks GitHub every 15 seconds
+2. If a new commit is detected, `nixos-rebuild switch` runs automatically
+3. The deployed revision is stored in `/var/lib/auto-deploy/revision`
+
+### Usage
+
+Just commit and push:
+```bash
+git add -A && git commit -m "your change" && git push
+```
+
+Within ~20 seconds, all nodes will detect and deploy the change.
+
+### Monitoring GitOps
+
+```bash
+# Check recent deploy activity
+ssh admin@node1.local "journalctl -u auto-deploy -n 20"
+
+# Check current deployed revision
+ssh admin@node1.local "cat /var/lib/auto-deploy/revision"
+
+# Check timer status
+ssh admin@node1.local "systemctl status auto-deploy.timer"
+
+# Manually trigger deploy (if needed)
+ssh admin@node1.local "sudo systemctl start auto-deploy"
+```
+
+### Key Files
+
+- `gitops.nix` - Auto-deploy service and timer configuration
+- `/var/lib/auto-deploy/revision` - Stored revision on each node
+
+### Troubleshooting GitOps
+
+If auto-deploy fails:
+```bash
+# Check logs for errors
+ssh admin@node1.local "journalctl -u auto-deploy -n 50"
+
+# Common issues:
+# - GitHub SSH access: check /root/.ssh/id_ed25519 exists
+# - Network: ensure node can reach github.com
+# - Disk space: run nix-collect-garbage -d
 ```
 
 ## Kubernetes (K3s)
@@ -222,6 +276,7 @@ scp -J samuel@desktop admin@node1.local:/etc/rancher/k3s/k3s.yaml ~/.kube/config
 | `configuration.nix` | Base system settings (users, packages) | Often |
 | `k3s.nix` | K3s Kubernetes cluster configuration | Rarely |
 | `monitoring.nix` | Prometheus + Grafana for node1 | Rarely |
+| `gitops.nix` | Auto-deploy service (15s polling) | Rarely |
 | `flake.nix` | Node definitions, build outputs | Rarely |
 | `flake.lock` | Pinned nixpkgs version | Only when updating packages |
 | `hardware-configuration.nix` | Boot/hardware settings | Rarely |
@@ -238,26 +293,25 @@ scp -J samuel@desktop admin@node1.local:/etc/rancher/k3s/k3s.yaml ~/.kube/config
    ```bash
    git add -A && git commit -m "Description" && git push
    ```
-3. Deploy to nodes (nodes pull directly from GitHub):
-   ```bash
-   # Single node (from desktop or via jump host)
-   ssh admin@node1.local "sudo nixos-rebuild switch --flake 'git+ssh://git@github.com/SamuelSchlesinger/odroid-c4-cluster#node1'"
+3. **GitOps handles deployment automatically** - all nodes will detect and deploy within ~20 seconds
 
-   # From MacBook via jump host
-   ssh -J samuel@desktop admin@node1.local "sudo nixos-rebuild switch --flake 'git+ssh://git@github.com/SamuelSchlesinger/odroid-c4-cluster#node1'"
-   ```
-
-### Deploying to All Nodes
-
-Deploy to all nodes in parallel:
+To monitor the rollout:
 ```bash
-# From desktop
+ssh -J samuel@desktop admin@node1.local "journalctl -u auto-deploy -f"
+```
+
+### Manual Deployment (if GitOps fails)
+
+Normally GitOps handles deployment automatically. If you need to deploy manually:
+
+```bash
+# Trigger GitOps on all nodes
 for i in 1 2 3 4 5 6 7; do
-  ssh admin@node$i.local "sudo nixos-rebuild switch --flake 'git+ssh://git@github.com/SamuelSchlesinger/odroid-c4-cluster#node$i'" &
+  ssh -J samuel@desktop admin@node$i.local "sudo systemctl start auto-deploy" &
 done
 wait
 
-# From MacBook (via jump host)
+# Or bypass GitOps entirely (emergency)
 for i in 1 2 3 4 5 6 7; do
   ssh -J samuel@desktop admin@node$i.local "sudo nixos-rebuild switch --flake 'git+ssh://git@github.com/SamuelSchlesinger/odroid-c4-cluster#node$i'" &
 done
