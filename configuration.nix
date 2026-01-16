@@ -81,6 +81,17 @@
     wget
   ];
 
+  # Post-build hook to push builds to desktop cache
+  environment.etc."nix/post-build-hook.sh" = {
+    mode = "0755";
+    text = ''
+      #!/bin/bash
+      set -euf
+      export NIX_SSHOPTS="-o StrictHostKeyChecking=accept-new -i /root/.ssh/id_ed25519"
+      exec nix copy --to "ssh://samuel@192.168.4.25" $OUT_PATHS
+    '';
+  };
+
   # Enable flakes and distributed builds
   nix = {
     settings = {
@@ -100,6 +111,8 @@
       ];
       # Sign all builds with our cluster key
       secret-key-files = "/etc/nix/cache-priv-key.pem";
+      # Auto-push builds to desktop cache
+      post-build-hook = "/etc/nix/post-build-hook.sh";
     };
 
     # Enable distributed builds across the cluster
