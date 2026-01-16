@@ -5,7 +5,7 @@
 let
   # Toggle to enable/disable K3s cluster
   # Set to false to save energy when Kubernetes is not needed
-  enableK3s = true;
+  enableK3s = false;
 
   # node1 is the initial server; others join it
   initialServer = "node1.local";
