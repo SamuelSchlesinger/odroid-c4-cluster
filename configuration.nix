@@ -86,6 +86,8 @@
       ];
       # Sign builds with cluster key (for distributed builds)
       secret-key-files = "/etc/nix/cache-priv-key.pem";
+      # Explicitly disable post-build-hook (clear any previous setting)
+      post-build-hook = "";
     };
 
     # Enable distributed builds across the cluster
