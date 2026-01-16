@@ -343,18 +343,12 @@ odroid-c4-cluster/
 ├── flash-with-towboot.sh     # SD card flashing script (macOS)
 ├── distribute-cluster-keys.sh # Admin SSH key distribution script
 ├── setup-distributed-builds.sh # Root SSH + cache key distribution
+├── .gitignore                # Ignores build outputs and logs
 ├── README.md                 # Quick start guide
 ├── CLUSTER-GUIDE.md          # This file
 ├── CLAUDE.md                 # Claude Code operational guide
 └── odroid-C4-2023.07-007/    # Tow-Boot bootloader
-    ├── binaries/
-    │   ├── Tow-Boot.mmcboot.bin
-    │   └── Tow-Boot.noenv.bin
-    ├── config/
-    │   ├── mmcboot.config
-    │   └── noenv.config
-    ├── mmcboot.installer.img
-    └── shared.disk-image.img
+    └── shared.disk-image.img # Bootloader image for flashing
 ```
 
 ### Key Files Explained

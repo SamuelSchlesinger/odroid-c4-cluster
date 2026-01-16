@@ -1,0 +1,11 @@
+# Build outputs
+result
+result-*
+
+# Build logs
+*.log
+
+# Editor files
+*~
+.*.swp
+.DS_Store
