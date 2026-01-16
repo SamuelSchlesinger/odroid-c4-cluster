@@ -13,7 +13,7 @@ let
     LOCK_FILE="/var/run/auto-deploy.lock"
     REVISION_FILE="${revisionFile}"
     LOG_PREFIX="[auto-deploy]"
-    export GIT_SSH_COMMAND="ssh -i /root/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new"
+    export GIT_SSH_COMMAND="${pkgs.openssh}/bin/ssh -i /root/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new"
 
     log() {
       echo "$LOG_PREFIX $1"
