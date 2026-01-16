@@ -132,6 +132,31 @@ The cluster runs K3s with all 7 nodes as servers (HA control plane). This provid
 - **Initial server**: node1 (has `--cluster-init`)
 - **Token file**: `/etc/k3s/token` on all nodes
 
+### Enabling/Disabling K3s
+
+K3s can be toggled on or off to save energy when Kubernetes is not needed. Edit `k3s.nix` and change the `enableK3s` variable:
+
+```nix
+# In k3s.nix, line 8
+enableK3s = true;   # Set to false to disable K3s
+```
+
+When disabled:
+- K3s service won't start on any node
+- K3s-related firewall ports are closed
+- Saves ~200-400MB RAM per node
+
+**To disable K3s:**
+1. Edit `k3s.nix`: set `enableK3s = false;`
+2. Commit and push: `git add -A && git commit -m "Disable K3s" && git push`
+3. Deploy to all nodes (see [Deploying to All Nodes](#deploying-to-all-nodes))
+
+**To re-enable K3s:**
+1. Edit `k3s.nix`: set `enableK3s = true;`
+2. Commit and push
+3. Deploy to all nodes
+4. The cluster will reform automatically (node1 bootstraps, others rejoin via token)
+
 ### Common K3s Operations
 
 ```bash

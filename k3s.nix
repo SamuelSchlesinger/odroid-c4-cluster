@@ -3,6 +3,10 @@
 { config, pkgs, lib, ... }:
 
 let
+  # Toggle to enable/disable K3s cluster
+  # Set to false to save energy when Kubernetes is not needed
+  enableK3s = true;
+
   # node1 is the initial server; others join it
   initialServer = "node1.local";
 
@@ -11,7 +15,7 @@ let
 in
 {
   services.k3s = {
-    enable = true;
+    enable = enableK3s;
     role = "server";
 
     # Token file for cluster authentication (must exist on all nodes)
@@ -47,8 +51,8 @@ in
     "d /etc/k3s 0755 root root -"
   ];
 
-  # Firewall ports for K3s
-  networking.firewall = {
+  # Firewall ports for K3s (only opened when K3s is enabled)
+  networking.firewall = lib.mkIf enableK3s {
     allowedTCPPorts = [
       6443  # Kubernetes API
       2379  # etcd client
@@ -60,6 +64,8 @@ in
     ];
   };
 
-  # Kubectl config for admin user
-  environment.variables.KUBECONFIG = "/etc/rancher/k3s/k3s.yaml";
+  # Kubectl config for admin user (only set when K3s is enabled)
+  environment.variables = lib.mkIf enableK3s {
+    KUBECONFIG = "/etc/rancher/k3s/k3s.yaml";
+  };
 }

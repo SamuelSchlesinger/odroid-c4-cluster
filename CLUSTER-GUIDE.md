@@ -708,6 +708,24 @@ K3s normally bundles several optional components. We disable them to save resour
 
 For this home cluster, we skip that complexity. Services are exposed directly via NodePort (e.g., port 30080), accessible on any node's IP.
 
+### Enabling/Disabling K3s
+
+The entire K3s cluster can be toggled on or off via a single variable in `k3s.nix`. This is useful for saving energy when Kubernetes is not needed.
+
+**To toggle K3s**, edit `k3s.nix` line 8:
+
+```nix
+enableK3s = true;   # Set to false to disable the entire K3s cluster
+```
+
+**When K3s is disabled:**
+- The `k3s` service doesn't start on any node
+- K3s-related firewall ports (6443, 2379, 2380, 8472, 10250) are closed
+- The `KUBECONFIG` environment variable is not set
+- Saves ~200-400MB RAM per node (control plane overhead)
+
+**Re-enabling K3s:** After setting `enableK3s = true` and deploying, the cluster will reform automatically. Node1 bootstraps with `--cluster-init`, and nodes 2-7 rejoin using the token file at `/etc/k3s/token`.
+
 ### Ports
 
 | Port | Protocol | Purpose |
