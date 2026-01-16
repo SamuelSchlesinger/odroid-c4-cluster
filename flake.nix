@@ -14,6 +14,7 @@
         ./hardware-configuration.nix
         ./configuration.nix
         ./k3s.nix
+        ./gitops.nix
         { networking.hostName = hostname; }
       ];
     };
@@ -30,6 +31,7 @@
           ./configuration.nix
           ./k3s.nix
           ./monitoring.nix
+          ./gitops.nix
           { networking.hostName = "node1"; }
         ];
       };
