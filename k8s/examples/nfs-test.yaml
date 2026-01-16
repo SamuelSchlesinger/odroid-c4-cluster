@@ -1,0 +1,53 @@
+# NFS Storage Test
+# Creates a PVC and a pod that writes to it
+# Run: kubectl apply -f nfs-test.yaml
+# Verify: kubectl exec -it nfs-test -- cat /data/hello.txt
+# Cleanup: kubectl delete -f nfs-test.yaml
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nfs-test-pvc
+  namespace: default
+spec:
+  storageClassName: nfs
+  accessModes:
+    - ReadWriteMany    # NFS supports RWX!
+  resources:
+    requests:
+      storage: 100Mi
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nfs-test
+  namespace: default
+spec:
+  containers:
+    - name: test
+      image: busybox:latest
+      command:
+        - sh
+        - -c
+        - |
+          echo "Hello from NFS! Written at $(date)" > /data/hello.txt
+          echo "NFS is working. File contents:"
+          cat /data/hello.txt
+          echo "Sleeping forever..."
+          sleep infinity
+      volumeMounts:
+        - name: nfs-data
+          mountPath: /data
+      resources:
+        limits:
+          memory: 64Mi
+          cpu: 50m
+        requests:
+          memory: 32Mi
+          cpu: 10m
+  volumes:
+    - name: nfs-data
+      persistentVolumeClaim:
+        claimName: nfs-test-pvc

@@ -1,0 +1,140 @@
+# NFS Subdir External Provisioner
+# Automatically provisions PersistentVolumes from the desktop NFS share
+# NFS Server: 192.168.4.25 (desktop)
+# NFS Path: /media/samuel/Extra/k8s-nfs
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nfs-provisioner
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nfs-provisioner
+  namespace: nfs-provisioner
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: nfs-provisioner-runner
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "update", "patch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: nfs-provisioner-runner
+subjects:
+  - kind: ServiceAccount
+    name: nfs-provisioner
+    namespace: nfs-provisioner
+roleRef:
+  kind: ClusterRole
+  name: nfs-provisioner-runner
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: nfs-provisioner-leader-locking
+  namespace: nfs-provisioner
+rules:
+  - apiGroups: [""]
+    resources: ["endpoints"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: nfs-provisioner-leader-locking
+  namespace: nfs-provisioner
+subjects:
+  - kind: ServiceAccount
+    name: nfs-provisioner
+    namespace: nfs-provisioner
+roleRef:
+  kind: Role
+  name: nfs-provisioner-leader-locking
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nfs-provisioner
+  namespace: nfs-provisioner
+  labels:
+    app: nfs-provisioner
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: nfs-provisioner
+  template:
+    metadata:
+      labels:
+        app: nfs-provisioner
+    spec:
+      serviceAccountName: nfs-provisioner
+      containers:
+        - name: nfs-provisioner
+          image: registry.k8s.io/sig-storage/nfs-subdir-external-provisioner:v4.0.2
+          volumeMounts:
+            - name: nfs-root
+              mountPath: /persistentvolumes
+          env:
+            - name: PROVISIONER_NAME
+              value: k8s-sigs.io/nfs-subdir-external-provisioner
+            - name: NFS_SERVER
+              value: 192.168.4.25
+            - name: NFS_PATH
+              value: /media/samuel/Extra/k8s-nfs
+          resources:
+            limits:
+              memory: 128Mi
+              cpu: 100m
+            requests:
+              memory: 64Mi
+              cpu: 50m
+      volumes:
+        - name: nfs-root
+          nfs:
+            server: 192.168.4.25
+            path: /media/samuel/Extra/k8s-nfs
+
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: nfs
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "false"
+parameters:
+  archiveOnDelete: "true"
+provisioner: k8s-sigs.io/nfs-subdir-external-provisioner
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+allowVolumeExpansion: true
