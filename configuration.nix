@@ -81,38 +81,19 @@
     wget
   ];
 
-  # Post-build hook to push builds to desktop cache
-  environment.etc."nix/post-build-hook.sh" = {
-    mode = "0755";
-    text = ''
-      #!/bin/bash
-      set -euf
-      export NIX_SSHOPTS="-o StrictHostKeyChecking=accept-new -i /root/.ssh/id_ed25519"
-      exec nix copy --to "ssh://samuel@192.168.4.25" $OUT_PATHS
-    '';
-  };
-
   # Enable flakes and distributed builds
   nix = {
     settings = {
       experimental-features = [ "nix-command" "flakes" ];
       trusted-users = [ "root" "admin" ];
-      # Binary cache substituters (desktop cache first, then official)
-      # Note: Using IP because nix-daemon doesn't resolve mDNS
-      substituters = [
-        "http://192.168.4.25:5000"
-        "https://cache.nixos.org"
-      ];
-      # Trust builds signed by our caches
+      # Binary cache
+      substituters = [ "https://cache.nixos.org" ];
       trusted-public-keys = [
         "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
         "odroid-cluster:h/8zXapPMFf2htwIuN5Pgu5e59wubGIJjbAeO+5GPK8="
-        "desktop-cache:VKMDqj8ZMNSALD1+vnmLs/ZBtBU9RgzrOAUQYQbldak="
       ];
-      # Sign all builds with our cluster key
+      # Sign builds with cluster key (for distributed builds)
       secret-key-files = "/etc/nix/cache-priv-key.pem";
-      # Auto-push builds to desktop cache
-      post-build-hook = "/etc/nix/post-build-hook.sh";
     };
 
     # Enable distributed builds across the cluster
