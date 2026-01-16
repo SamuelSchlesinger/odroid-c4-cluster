@@ -421,6 +421,10 @@ odroid-c4-cluster/
 ├── README.md                 # Quick start guide
 ├── CLUSTER-GUIDE.md          # This file
 ├── CLAUDE.md                 # Claude Code operational guide
+├── k8s/                      # Kubernetes resources and tutorials
+│   └── examples/             # Example applications and walkthroughs
+│       ├── README.md         # Step-by-step K8s tutorial
+│       └── whoami-app.yaml   # Sample deployment with service
 └── odroid-C4-2023.07-007/    # Tow-Boot bootloader
     └── shared.disk-image.img # Bootloader image for flashing
 ```
@@ -710,6 +714,19 @@ ssh admin@node1.local "kubectl get pods -A"
 
 # Deploy a simple workload
 ssh admin@node1.local "kubectl run nginx --image=nginx:alpine"
+```
+
+### Learning Kubernetes
+
+For a hands-on tutorial, see **`k8s/examples/README.md`**. It walks through:
+- Deploying a multi-replica application
+- Understanding namespaces, deployments, and services
+- Observing load balancing (and why browsers behave differently than curl)
+- Scaling, logs, exec, and cleanup
+
+Deploy the example application:
+```bash
+kubectl apply -f https://raw.githubusercontent.com/SamuelSchlesinger/odroid-c4-cluster/main/k8s/examples/whoami-app.yaml
 ```
 
 ### Common Commands
@@ -1103,5 +1120,6 @@ This enables:
 | K8s nodes | `ssh admin@node1.local kubectl get nodes` |
 | K8s pods | `ssh admin@node1.local kubectl get pods -A` |
 | Deploy app | `ssh admin@node1.local kubectl apply -f app.yaml` |
+| K8s tutorial | `k8s/examples/README.md` |
 | K8s logs | `ssh admin@node1.local kubectl logs <pod>` |
 | K3s status | `ssh admin@node1.local systemctl status k3s` |

@@ -16,6 +16,8 @@ This repository contains the **NixOS configuration for a 7-node Odroid C4 cluste
 | Check K8s nodes | `ssh admin@node1.local "kubectl get nodes"` |
 | Check all pods | `ssh admin@node1.local "kubectl get pods -A"` |
 | Deploy workload | `ssh admin@node1.local "kubectl apply -f app.yaml"` |
+| Deploy example | `kubectl apply -f https://raw.githubusercontent.com/.../k8s/examples/whoami-app.yaml` |
+| K8s tutorial | See `k8s/examples/README.md` |
 | K3s service status | `ssh admin@node1.local "systemctl status k3s"` |
 | **NixOS** | |
 | Check cluster health | See [Health Check](#health-check) below |
@@ -199,6 +201,7 @@ scp -J samuel@desktop admin@node1.local:/etc/rancher/k3s/k3s.yaml ~/.kube/config
 | `hardware-configuration.nix` | Boot/hardware settings | Rarely |
 | `setup-distributed-builds.sh` | Root SSH + cache key setup | Rarely |
 | `CLUSTER-GUIDE.md` | Comprehensive documentation | As needed |
+| `k8s/examples/` | Kubernetes tutorials and example manifests | As needed |
 
 ## Common Operations
 
