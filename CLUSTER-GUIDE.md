@@ -324,7 +324,7 @@ All nodes run **K3s**, a lightweight Kubernetes distribution:
 |-----------|---------|
 | **K3s** | Lightweight Kubernetes (single binary) |
 | **containerd** | Container runtime (bundled with K3s) |
-| **flannel** | Pod networking (VXLAN backend) |
+| **flannel** | Pod networking (host-gw backend) |
 | **CoreDNS** | Service discovery |
 
 **Cluster topology:**
@@ -692,7 +692,7 @@ The cluster runs K3s, a lightweight Kubernetes distribution. 3 server nodes (nod
 │   │   A = Agent (kubelet only, runs workloads)                      │   │
 │   └─────────────────────────────────────────────────────────────────┘   │
 │                                                                          │
-│   Networking: Flannel VXLAN (port 8472/udp)                             │
+│   Networking: Flannel host-gw (direct routing, no encapsulation)        │
 │   DNS: CoreDNS (cluster.local)                                          │
 │   API: https://node1-3:6443                                             │
 │                                                                          │
@@ -711,6 +711,24 @@ K3s normally bundles several optional components. We disable them to save resour
 **What is an Ingress Controller?** In production Kubernetes, you typically don't expose every service via NodePort. Instead, an ingress controller (like Traefik or nginx-ingress) acts as a reverse proxy: it listens on ports 80/443 and routes requests to different services based on the URL. For example, `app1.example.com` → Service A, `app2.example.com` → Service B.
 
 For this home cluster, we skip that complexity. Services are exposed directly via NodePort (e.g., port 30080), accessible on any node's IP.
+
+### Flannel Backend: host-gw
+
+K3s uses Flannel for pod networking. We use the **host-gw** backend instead of the default VXLAN:
+
+| Backend | How it works | Pros | Cons |
+|---------|--------------|------|------|
+| **host-gw** (our choice) | Adds static routes to each node's routing table | Simple, no encapsulation overhead, easier debugging | Requires all nodes on same L2 network |
+| **vxlan** (default) | Encapsulates pod traffic in UDP packets | Works across L3 networks, no special routing needed | More complex, slight performance overhead |
+
+**Why host-gw?** All cluster nodes are on the same local network (192.168.4.x), so host-gw's simplicity wins. Traffic from pod A on node4 to pod B on node5 is routed directly: node4's kernel sends packets to node5's IP, which then delivers to the pod.
+
+**Example routes** (on node4 with pod CIDR 10.42.5.0/24):
+```
+10.42.5.0/24 dev cni0           # Local pods via bridge
+10.42.1.0/24 via 192.168.4.251  # node5's pods via node5's IP
+10.42.7.0/24 via 192.168.4.255  # node3's pods via node3's IP
+```
 
 ### Enabling/Disabling K3s
 
