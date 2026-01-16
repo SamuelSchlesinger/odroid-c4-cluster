@@ -122,11 +122,12 @@ node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpo
 
 ## Kubernetes (K3s)
 
-The cluster runs K3s with all 7 nodes as servers (HA control plane). This provides fault tolerance for up to 3 node failures.
+The cluster runs K3s with 3 server nodes (control plane) and 4 agent nodes (workers). This provides fault tolerance for 1 server failure while keeping etcd responsive.
 
 ### Architecture
 
-- **Control plane**: All 7 nodes (etcd + API server)
+- **Server nodes**: node1, node2, node3 (control plane + etcd)
+- **Agent nodes**: node4, node5, node6, node7 (workers only)
 - **Runtime**: containerd (bundled with K3s)
 - **Networking**: Flannel VXLAN
 - **Initial server**: node1 (has `--cluster-init`)
@@ -427,7 +428,7 @@ nix build nixpkgs#hello --max-jobs 0
 | RAM | 4GB per node (28GB total) |
 | OS | NixOS 25.05 |
 | Kernel | 6.6 LTS |
-| Orchestration | K3s v1.32 (all nodes as servers) |
+| Orchestration | K3s v1.32 (3 servers + 4 agents) |
 | Container Runtime | containerd (bundled with K3s) |
 | Network | Gigabit Ethernet, DHCP, mDNS |
 | SSH User | `admin` (passwordless sudo) |
