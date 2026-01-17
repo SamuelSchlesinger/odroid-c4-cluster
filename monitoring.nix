@@ -26,20 +26,6 @@
           ];
         }];
       }
-      {
-        job_name = "blocky";
-        static_configs = [{
-          targets = [
-            "node1.local:30055"
-            "node2.local:30055"
-            "node3.local:30055"
-            "node4.local:30055"
-            "node5.local:30055"
-            "node6.local:30055"
-            "node7.local:30055"
-          ];
-        }];
-      }
     ];
   };
 
