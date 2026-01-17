@@ -21,7 +21,7 @@ This repository contains the **NixOS configuration for a 7-node Odroid C4 cluste
 | K3s service status | `ssh admin@node1.local "systemctl status k3s"` |
 | **NixOS** | |
 | Check cluster health | See [Health Check](#health-check) below |
-| SSH to node | `ssh admin@node1.local` (or via jump host) |
+| SSH to node | `ssh admin@node1.local` (or via desktop as jump host `ssh -J samuel@desktop admin@node1.local`) |
 | Build image | On desktop: `nix build .#node1-sdImage` |
 | **Deploy changes** | `git commit && git push` (GitOps auto-deploys within ~20s) |
 | Manual deploy | `ssh admin@node1.local "sudo systemctl start auto-deploy"` |
@@ -41,7 +41,7 @@ Access cluster services via short URLs (requires Tailscale connection):
 | `go/prom` | Prometheus (short) |
 | `go/node1` - `go/node7` | Node metrics (node_exporter) |
 
-**Setup**: The go-links nginx proxy runs on the desktop. DNS resolution is via `/etc/hosts` on each client machine (`100.123.199.53 go` pointing to desktop's Tailscale IP).
+**Setup**: The go-links nginx proxy runs on the desktop. DNS resolution is via `/etc/hosts` on each client machine (pointing `go` to the desktop's Tailscale IP).
 
 ## Network Access
 
@@ -62,16 +62,9 @@ ssh samuel@desktop
 ssh admin@node1.local
 ```
 
-### Current Node IPs
-| Node | mDNS | IP (may change) |
-|------|------|-----------------|
-| node1 | node1.local | 192.168.4.250 |
-| node2 | node2.local | 192.168.5.0 |
-| node3 | node3.local | 192.168.4.255 |
-| node4 | node4.local | 192.168.4.254 |
-| node5 | node5.local | 192.168.4.251 |
-| node6 | node6.local | 192.168.4.253 |
-| node7 | node7.local | 192.168.4.252 |
+### Node Hostnames
+
+Nodes are accessible via mDNS: `node1.local` through `node7.local`. IPs are assigned via DHCP.
 
 ## Health Check
 
@@ -103,7 +96,7 @@ The cluster runs Prometheus + Grafana for monitoring:
 | Grafana | node1 | 3000 | Dashboards, visualization |
 | node_exporter | all nodes | 9100 | System metrics (CPU, RAM, disk, network) |
 
-**Access**: Use `go/grafana` or `http://node1.local:3000` (admin/admin).
+**Access**: Use `go/grafana` or `http://node1.local:3000`.
 
 **Key files**:
 - `monitoring.nix` - Prometheus + Grafana config (node1 only)
@@ -491,9 +484,8 @@ nix build nixpkgs#hello --max-jobs 0
 
 ### Node unreachable
 1. Check if other nodes work (network issue vs single node)
-2. Try IP instead of mDNS: `ssh admin@192.168.4.250`
-3. Check router DHCP leases for current IP
-4. Physical check: power LED, ethernet link lights
+2. Try IP instead of mDNS (check router DHCP leases for current IP)
+3. Physical check: power LED, ethernet link lights
 
 ### Build fails
 ```bash
