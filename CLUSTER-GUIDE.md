@@ -301,6 +301,7 @@ users.users.root.openssh.authorizedKeys.keys = [
 | etcd | K3s cluster state | 2379-2380 | Server nodes (1-3) |
 | Prometheus | Metrics aggregation | 9090 | node1 |
 | Grafana | Dashboards | 3000 | node1 |
+| Blocky DNS | Ad-blocking DNS server | 53 (via NAT) | All nodes (K3s DaemonSet) |
 
 ### Installed Packages
 
@@ -406,6 +407,64 @@ Short URLs for cluster services, accessible via Tailscale from anywhere:
 sudo sh -c 'echo "100.123.199.53 go" >> /etc/hosts'
 ```
 
+### Blocky DNS
+
+The cluster runs [Blocky](https://0xerr0r.github.io/blocky/), a DNS proxy with ad/tracker/malware blocking. It runs as a K3s DaemonSet, providing DNS on every node.
+
+**Features**:
+- Blocks ads, trackers, and malware using curated blocklists
+- Uses DNS-over-HTTPS (Cloudflare, Google) for upstream queries
+- Caching with prefetching for fast responses
+- Prometheus metrics at `:4000/metrics`
+
+**How it works**:
+```
+Client (phone/laptop)
+    │
+    ▼ DNS query to any node IP:53
+┌───────────────────────────────────────────┐
+│  Node (any of 1-7)                        │
+│  ┌─────────────────────────────────────┐  │
+│  │ dns-forwarder.nix                   │  │
+│  │ NAT: port 53 → localhost:30053      │  │
+│  └─────────────────────────────────────┘  │
+│                    │                       │
+│                    ▼                       │
+│  ┌─────────────────────────────────────┐  │
+│  │ Blocky (K3s DaemonSet)              │  │
+│  │ NodePort 30053 (UDP), 30054 (TCP)   │  │
+│  └─────────────────────────────────────┘  │
+└───────────────────────────────────────────┘
+    │
+    ▼ DoH query
+Cloudflare/Google DNS
+```
+
+**Deployment**:
+```bash
+# Deploy Blocky to K3s
+kubectl apply -f k8s/blocky/
+
+# Verify pods are running (one per node)
+kubectl get pods -n dns -o wide
+```
+
+**Usage**: Point any device's DNS to any cluster node's IP address. The NAT rules in `dns-forwarder.nix` forward port 53 to Blocky's NodePort.
+
+```bash
+# Test DNS resolution
+dig @node1.local example.com
+
+# Test ad blocking (should return 0.0.0.0)
+dig @node1.local ads.google.com
+```
+
+**Configuration files**:
+- `k8s/blocky/` - Kubernetes manifests (namespace, configmap, daemonset, service)
+- `dns-forwarder.nix` - NixOS NAT rules for port 53 forwarding
+
+**Monitoring**: Blocky exposes Prometheus metrics. Add a scrape target in `monitoring.nix` to collect DNS query statistics.
+
 ---
 
 ## Repository Structure
@@ -417,6 +476,7 @@ odroid-c4-cluster/
 ├── configuration.nix         # Shared NixOS config for all nodes
 ├── k3s.nix                   # K3s Kubernetes configuration (all nodes)
 ├── monitoring.nix            # Prometheus + Grafana (node1 only)
+├── dns-forwarder.nix         # Port 53 NAT to Blocky NodePort (all nodes)
 ├── hardware-configuration.nix # Odroid C4 hardware settings
 ├── flash-with-towboot.sh     # SD card flashing script (macOS)
 ├── setup-distributed-builds.sh # Root SSH + cache key distribution
@@ -425,6 +485,7 @@ odroid-c4-cluster/
 ├── CLUSTER-GUIDE.md          # This file
 ├── CLAUDE.md                 # Claude Code operational guide
 ├── k8s/                      # Kubernetes resources and tutorials
+│   ├── blocky/               # Blocky DNS ad-blocker manifests
 │   └── examples/             # Example applications and walkthroughs
 │       ├── README.md         # Step-by-step K8s tutorial
 │       └── whoami-app.yaml   # Sample deployment with service
@@ -439,6 +500,7 @@ odroid-c4-cluster/
 | `flake.nix` | Defines the 7 node configurations and SD image build targets |
 | `flake.lock` | **Critical**: Pins exact nixpkgs version. Must match deployed nodes. |
 | `configuration.nix` | All system settings: users, SSH, packages, services |
+| `dns-forwarder.nix` | NAT rules to forward port 53 to Blocky's NodePort (30053) |
 | `hardware-configuration.nix` | Boot settings, kernel modules, filesystem mounts |
 | `flash-with-towboot.sh` | Writes Tow-Boot + NixOS image to SD card |
 

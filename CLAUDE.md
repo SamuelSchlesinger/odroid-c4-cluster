@@ -275,6 +275,7 @@ scp -J samuel@desktop admin@node1.local:/etc/rancher/k3s/k3s.yaml ~/.kube/config
 | `hardware-configuration.nix` | Boot/hardware settings | Rarely |
 | `setup-distributed-builds.sh` | Root SSH + cache key setup | Rarely |
 | `CLUSTER-GUIDE.md` | Comprehensive documentation | As needed |
+| `SECURITY.md` | Cluster security model and policies | As needed |
 | `k8s/examples/` | Kubernetes tutorials and example manifests | As needed |
 
 ## Common Operations

@@ -1,6 +1,16 @@
 # NixOS on Odroid C4 Cluster
 
-Reproducible NixOS configuration for a 7-node Odroid C4 cluster running **K3s Kubernetes**.
+A fully reproducible NixOS configuration for a 7-node ARM cluster running K3s Kubernetes. This project provides a complete infrastructure-as-code setup including GitOps auto-deployment (push to deploy), distributed Nix builds across all nodes, Prometheus + Grafana monitoring, and sensible security defaults. Everything is declarative and version-controlled - just edit, commit, and push.
+
+## Features
+
+- **Declarative NixOS Configuration** - All system settings defined in Nix, ensuring reproducibility and easy rollbacks
+- **K3s Kubernetes** - Production-ready cluster with 3 control plane nodes and 4 workers for high availability
+- **GitOps Auto-Deployment** - Push to GitHub and all nodes automatically deploy within seconds
+- **Distributed Nix Builds** - Share build capacity across all 7 nodes (28 cores total)
+- **Prometheus + Grafana Monitoring** - Full observability with node metrics, dashboards, and alerts
+- **mDNS Discovery** - Access nodes via `node1.local` through `node7.local` without configuring DNS
+- **Security by Default** - SSH key authentication only, firewall enabled, no passwords
 
 ## Cluster Overview
 
@@ -28,6 +38,19 @@ ssh admin@node1.local "kubectl expose deployment nginx --port=80 --type=NodePort
 # Access via any node IP on the assigned port
 curl http://node1.local:<nodeport>
 ```
+
+## Prerequisites
+
+Before getting started, you will need:
+
+- **Linux machine with Nix installed** - Required for building SD card images (NixOS, or any Linux with Nix package manager)
+- **7x Odroid C4 boards** - Each with a microSD card (8GB minimum, 32GB+ recommended)
+- **Network switch and ethernet cables** - Gigabit recommended for best performance
+- **Familiarity with NixOS basics** - Understanding of flakes, `nixos-rebuild`, and Nix expressions
+
+Optional but helpful:
+- **macOS machine** - For flashing SD cards (or use Linux)
+- **USB SD card reader** - For flashing the images
 
 ## Quick Start (Initial Setup)
 
@@ -129,6 +152,12 @@ odroid-c4/
 - **README.md** - Quick start (this file)
 - **CLAUDE.md** - Operational guide for Claude Code workers
 - **CLUSTER-GUIDE.md** - Complete reference with diagrams, troubleshooting, examples
+
+## Contributing & Community
+
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** - Contribution guidelines and development workflow
+- **[SECURITY.md](SECURITY.md)** - Security model and how to report vulnerabilities
+- **[LICENSE](LICENSE)** - This project is MIT licensed
 
 ## Troubleshooting
 

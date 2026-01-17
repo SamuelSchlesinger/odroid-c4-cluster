@@ -20,9 +20,11 @@ spec:
           ports:
             - name: dns-udp
               containerPort: 53
+              hostPort: 53
               protocol: UDP
             - name: dns-tcp
               containerPort: 53
+              hostPort: 53
               protocol: TCP
             - name: http
               containerPort: 4000

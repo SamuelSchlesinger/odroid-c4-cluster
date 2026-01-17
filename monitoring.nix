@@ -53,7 +53,9 @@
       };
       security = {
         admin_user = "admin";
-        admin_password = "admin";  # Change on first login
+        # WARNING: Default credentials! Change immediately after first login.
+        # Access Grafana at http://node1.local:3000 and update the password.
+        admin_password = "admin";
       };
     };
 

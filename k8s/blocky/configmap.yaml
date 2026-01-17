@@ -24,10 +24,16 @@ data:
     blocking:
       denylists:
         ads:
+          # OISD basic - comprehensive ad/tracker blocking
+          - https://hosts.oisd.nl/basic
+          # Steven Black unified hosts
           - https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts
-          - https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt
+          # AdAway default blocklist
+          - https://adaway.org/hosts.txt
         trackers:
           - https://v.firebog.net/hosts/Easyprivacy.txt
+          # Peter Lowe's ad and tracking server list
+          - https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=0&mimetype=plaintext
         malware:
           - https://urlhaus.abuse.ch/downloads/hostfile/
 
