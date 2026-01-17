@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: blocky-config
+  namespace: dns
+data:
+  config.yml: |
+    # Blocky DNS configuration
+    # https://0xerr0r.github.io/blocky/latest/configuration/
+
+    # Upstream DNS servers (DNS-over-HTTPS for privacy)
+    upstreams:
+      groups:
+        default:
+          - https://cloudflare-dns.com/dns-query
+          - https://dns.google/dns-query
+
+    # Bootstrap DNS for initial DoH resolution
+    bootstrapDns:
+      - tcp+udp:1.1.1.1
+      - tcp+udp:8.8.8.8
+
+    # Blocklists for ad/tracker/malware blocking
+    blocking:
+      denylists:
+        ads:
+          - https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts
+          - https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt
+        trackers:
+          - https://v.firebog.net/hosts/Easyprivacy.txt
+        malware:
+          - https://urlhaus.abuse.ch/downloads/hostfile/
+
+      clientGroupsBlock:
+        default:
+          - ads
+          - trackers
+          - malware
+
+      # Return 0.0.0.0 for blocked domains
+      blockType: zeroIp
+
+      # Refresh blocklists every 4 hours
+      refreshPeriod: 4h
+
+    # Caching configuration
+    caching:
+      minTime: 5m
+      maxTime: 30m
+      prefetching: true
+      prefetchExpires: 2h
+      prefetchMaxItemsCount: 1000
+
+    # Prometheus metrics
+    prometheus:
+      enable: true
+      path: /metrics
+
+    # DNS ports
+    ports:
+      dns: 53
+      http: 4000
+
+    # Logging
+    log:
+      level: info
+      format: text
