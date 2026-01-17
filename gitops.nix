@@ -102,10 +102,11 @@ in
       StandardError = "journal";
     };
 
-    # Don't fail the system if this fails
+    # Rate limit: allow frequent starts since timer runs every 15s
+    # 30 starts per 5 minutes = timer can run continuously
     unitConfig = {
       StartLimitIntervalSec = 300;
-      StartLimitBurst = 3;
+      StartLimitBurst = 30;
     };
   };
 
