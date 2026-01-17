@@ -24,14 +24,10 @@ data:
     blocking:
       denylists:
         ads:
-          # OISD basic - comprehensive ad/tracker blocking
-          - https://hosts.oisd.nl/basic
-          # Steven Black unified hosts
+          # Steven Black unified hosts (comprehensive, fast)
           - https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts
           # AdAway default blocklist
           - https://adaway.org/hosts.txt
-        trackers:
-          - https://v.firebog.net/hosts/Easyprivacy.txt
           # Peter Lowe's ad and tracking server list
           - https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=0&mimetype=plaintext
         malware:
@@ -40,14 +36,17 @@ data:
       clientGroupsBlock:
         default:
           - ads
-          - trackers
           - malware
 
       # Return 0.0.0.0 for blocked domains
       blockType: zeroIp
 
-      # Refresh blocklists every 4 hours
-      refreshPeriod: 4h
+      # Blocklist loading settings
+      loading:
+        refreshPeriod: 4h
+        downloads:
+          timeout: 60s
+          attempts: 2
 
     # Caching configuration
     caching:
