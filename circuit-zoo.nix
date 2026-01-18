@@ -2,6 +2,19 @@
 
 let
   cfg = config.services.circuit-zoo;
+
+  # Binary from this repo (static musl build for aarch64)
+  circuit-zoo-bin = pkgs.stdenv.mkDerivation {
+    pname = "circuit-zoo";
+    version = "0.1.0";
+    src = ./bin;
+    phases = [ "installPhase" ];
+    installPhase = ''
+      mkdir -p $out/bin
+      cp $src/circuit_zoo $out/bin/
+      chmod +x $out/bin/circuit_zoo
+    '';
+  };
 in {
   options.services.circuit-zoo = {
     enable = lib.mkEnableOption "Circuit Zoo distributed search worker";
@@ -23,12 +36,6 @@ in {
       default = 14;
       description = "Maximum circuit size to search";
     };
-
-    binaryPath = lib.mkOption {
-      type = lib.types.path;
-      default = /opt/circuit_zoo;
-      description = "Path to the circuit_zoo binary";
-    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -40,14 +47,12 @@ in {
 
       serviceConfig = {
         Type = "simple";
-        ExecStart = "${cfg.binaryPath} -n ${toString cfg.n} -s ${toString cfg.maxSize} -d '${cfg.databaseUrl}' -w ${config.networking.hostName}";
+        ExecStart = "${circuit-zoo-bin}/bin/circuit_zoo -n ${toString cfg.n} -s ${toString cfg.maxSize} -d '${cfg.databaseUrl}' -w ${config.networking.hostName}";
         Restart = "always";
         RestartSec = "10s";
-        # Run as unprivileged user
         DynamicUser = true;
-        # Resource limits to prevent OOM
         MemoryMax = "3G";
-        CPUQuota = "350%";  # 3.5 cores
+        CPUQuota = "350%";
       };
     };
   };
