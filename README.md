@@ -1,5 +1,11 @@
 # NixOS on Odroid C4 Cluster
 
+> **Note**: This is my personal cluster configuration. If you want to use this as a starting point for your own cluster, you'll need to:
+> - Replace SSH public keys in `configuration.nix` with your own
+> - Update the GitHub repository URL in `flake.nix` and deployment commands
+> - Generate your own root SSH keys and binary cache signing keys (see `setup-distributed-builds.sh`)
+> - Adjust node count and hostnames to match your hardware
+
 A fully reproducible NixOS configuration for a 7-node ARM cluster running K3s Kubernetes. This project provides a complete infrastructure-as-code setup including GitOps auto-deployment (push to deploy), distributed Nix builds across all nodes, Prometheus + Grafana monitoring, and sensible security defaults. Everything is declarative and version-controlled - just edit, commit, and push.
 
 ## Features
