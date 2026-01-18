@@ -467,6 +467,111 @@ nix build nixpkgs#hello --max-jobs 0
 
 **Security note:** The cluster root key is NOT authorized on the desktop or MacBook - nodes cannot SSH back to those machines.
 
+## Circuit Zoo - Distributed Circuit Search
+
+The cluster runs **circuit-zoo**, a distributed search system for optimal boolean circuits. Workers on each node discover minimal AND/OR circuits for boolean functions and write results to a central PostgreSQL database on the desktop.
+
+### Architecture
+
+```
+┌─────────────────┐     ┌─────────────────┐
+│  Desktop (x86)  │     │ Odroid Cluster  │
+│  - PostgreSQL   │◄────│ - 7 workers     │
+│  - 192.168.4.25 │     │ - circuit-zoo   │
+└─────────────────┘     └─────────────────┘
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `circuit-zoo.nix` | NixOS module defining the systemd service |
+| `circuit-zoo/` | Rust source code for the worker |
+| `circuit-zoo/src/main.rs` | Parallel distributed worker implementation |
+| `circuit-zoo/schema.sql` | PostgreSQL schema |
+| `circuit-zoo/analyze.py` | Statistical analysis scripts |
+
+### Service Configuration
+
+The service is enabled in `flake.nix` for all nodes. Configuration options in `circuit-zoo.nix`:
+
+```nix
+services.circuit-zoo = {
+  enable = true;                    # Enable the worker
+  databaseUrl = "host=192.168.4.25 user=samuel dbname=samuel port=5432";
+  n = 5;                            # Number of input variables
+  maxSize = 14;                     # Maximum circuit size to search
+};
+```
+
+### Managing the Service
+
+```bash
+# Check status on a node
+ssh admin@node1.local "systemctl status circuit-zoo"
+
+# View logs
+ssh admin@node1.local "journalctl -u circuit-zoo -f"
+
+# Restart workers on all nodes
+for i in 1 2 3 4 5 6 7; do
+  ssh admin@node$i.local "sudo systemctl restart circuit-zoo" &
+done
+wait
+
+# Stop all workers
+for i in 1 2 3 4 5 6 7; do
+  ssh admin@node$i.local "sudo systemctl stop circuit-zoo" &
+done
+wait
+```
+
+### Database Queries (on desktop)
+
+```bash
+# Check discovery count
+psql -d samuel -c "SELECT COUNT(*) FROM functions WHERE n=5;"
+
+# Per-worker stats
+psql -d samuel -c "SELECT worker_id, COUNT(*) FROM functions WHERE n=5 GROUP BY worker_id;"
+
+# Recent discoveries
+psql -d samuel -c "SELECT * FROM functions WHERE n=5 ORDER BY discovered_at DESC LIMIT 10;"
+```
+
+### Updating the Worker
+
+1. Edit code in `circuit-zoo/src/main.rs`
+2. Commit and push: `git add -A && git commit -m "Update circuit-zoo" && git push`
+3. GitOps will rebuild and restart the service on all nodes
+
+### PostgreSQL Setup (Desktop)
+
+The desktop must have PostgreSQL configured for remote access:
+
+```bash
+# Run once on desktop
+cd circuit-zoo
+./setup-postgres.sh
+
+# Open firewall
+sudo ufw allow from 192.168.0.0/16 to any port 5432
+```
+
+### Troubleshooting
+
+```bash
+# Check if workers can reach database
+ssh admin@node1.local "nc -zv 192.168.4.25 5432"
+
+# Check for errors in logs
+ssh admin@node1.local "journalctl -u circuit-zoo -n 50 --no-pager"
+
+# Memory issues (OOM)
+ssh admin@node1.local "free -h"
+# The service has MemoryMax=3G to prevent OOM
+```
+
 ## Cluster Specifications
 
 | Property | Value |

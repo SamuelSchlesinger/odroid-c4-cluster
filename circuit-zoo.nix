@@ -3,17 +3,12 @@
 let
   cfg = config.services.circuit-zoo;
 
-  # Binary from this repo (static musl build for aarch64)
-  circuit-zoo-bin = pkgs.stdenv.mkDerivation {
+  # Build circuit_zoo from source
+  circuit-zoo-bin = pkgs.rustPlatform.buildRustPackage {
     pname = "circuit-zoo";
     version = "0.1.0";
-    src = ./bin;
-    phases = [ "installPhase" ];
-    installPhase = ''
-      mkdir -p $out/bin
-      cp $src/circuit_zoo $out/bin/
-      chmod +x $out/bin/circuit_zoo
-    '';
+    src = ./circuit-zoo;
+    cargoLock.lockFile = ./circuit-zoo/Cargo.lock;
   };
 in {
   options.services.circuit-zoo = {
