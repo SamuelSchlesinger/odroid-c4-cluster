@@ -28,7 +28,7 @@ in {
 
     maxSize = lib.mkOption {
       type = lib.types.int;
-      default = 14;
+      default = 13;
       description = "Maximum circuit size to search";
     };
   };
