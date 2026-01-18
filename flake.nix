@@ -16,10 +16,7 @@
         ./k3s.nix
         ./gitops.nix
         ./circuit-zoo.nix
-        {
-          networking.hostName = hostname;
-          services.circuit-zoo.enable = true;
-        }
+        { networking.hostName = hostname; }
       ];
     };
   in {
@@ -37,10 +34,7 @@
           ./monitoring.nix
           ./gitops.nix
           ./circuit-zoo.nix
-          {
-            networking.hostName = "node1";
-            services.circuit-zoo.enable = true;
-          }
+          { networking.hostName = "node1"; }
         ];
       };
 

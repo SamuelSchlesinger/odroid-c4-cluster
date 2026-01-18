@@ -1,6 +1,11 @@
+# Circuit Zoo distributed search configuration
 { config, lib, pkgs, ... }:
 
 let
+  # Toggle to enable/disable Circuit Zoo workers
+  # Set to false to stop circuit searches and save resources
+  enableCircuitZoo = false;
+
   cfg = config.services.circuit-zoo;
 
   # Build circuit_zoo from source
@@ -33,7 +38,7 @@ in {
     };
   };
 
-  config = lib.mkIf cfg.enable {
+  config = lib.mkIf enableCircuitZoo {
     systemd.services.circuit-zoo = {
       description = "Circuit Zoo distributed search worker";
       after = [ "network-online.target" ];
