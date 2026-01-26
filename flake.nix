@@ -3,9 +3,13 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+    pqcoin = {
+      url = "github:SamuelSchlesinger/pqcoin/dev";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, nixpkgs, ... }:
+  outputs = { self, nixpkgs, pqcoin, ... }:
   let
     # Helper to create a node configuration
     mkNode = hostname: nixpkgs.lib.nixosSystem {
@@ -15,6 +19,8 @@
         ./configuration.nix
         ./k3s.nix
         ./gitops.nix
+        pqcoin.nixosModules.default
+        ./pqcoin.nix  # Enable pqcoin mining on all nodes
         { networking.hostName = hostname; }
       ];
     };
@@ -32,6 +38,8 @@
           ./k3s.nix
           ./monitoring.nix
           ./gitops.nix
+          pqcoin.nixosModules.default
+          ./pqcoin.nix  # Enable pqcoin mining
           { networking.hostName = "node1"; }
         ];
       };
