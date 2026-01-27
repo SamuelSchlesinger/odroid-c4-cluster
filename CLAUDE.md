@@ -23,7 +23,7 @@ This repository contains the **NixOS configuration for a 7-node Odroid C4 cluste
 | Check cluster health | See [Health Check](#health-check) below |
 | SSH to node | `ssh admin@node1.local` (or via desktop as jump host `ssh -J samuel@desktop admin@node1.local`) |
 | Build image | On desktop: `nix build .#node1-sdImage` |
-| **Deploy changes** | `git commit && git push` (GitOps auto-deploys within ~20s) |
+| **Deploy changes** | `git commit && git push` (node1 builds and deploys to all) |
 | Manual deploy | `ssh admin@node1.local "sudo systemctl start auto-deploy"` |
 | Check GitOps status | `ssh admin@node1.local "journalctl -u auto-deploy -n 20"` |
 | Update packages | On desktop: `nix flake update && git add flake.lock && git commit && git push` |
@@ -116,13 +116,38 @@ node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpo
 
 ## GitOps Auto-Deploy
 
-The cluster automatically deploys changes when you push to GitHub. No manual deployment needed.
+The cluster uses centralized GitOps: **node1 is the sole builder** and pushes deployments to all other nodes.
+
+### Architecture
+
+```
+GitHub push
+    │
+    ▼
+node1 detects change (polls every 15s)
+    │
+    ▼
+node1 builds all 7 configs
+    │
+    ▼
+node1 copies to node2-7 via nix copy
+    │
+    ▼
+node1 SSHs to each node → activate
+    │
+    ▼
+Done (all nodes updated)
+
+nodes 2-7: No GitOps timer, just receive updates from node1
+```
 
 ### How It Works
 
-1. Each node runs a systemd timer that checks GitHub every 15 seconds
-2. If a new commit is detected, `nixos-rebuild switch` runs automatically
-3. The deployed revision is stored in `/var/lib/auto-deploy/revision`
+1. **node1** runs a systemd timer that checks GitHub every 15 seconds
+2. If a new commit is detected, node1 builds all 7 NixOS configurations
+3. node1 uses `nix copy` to push builds to nodes 2-7
+4. node1 activates the new config on itself and all other nodes via SSH
+5. The deployed revision is stored in `/var/lib/auto-deploy/revision` on all nodes
 
 ### Usage
 
@@ -131,40 +156,58 @@ Just commit and push:
 git add -A && git commit -m "your change" && git push
 ```
 
-Within ~20 seconds, all nodes will detect and deploy the change.
+node1 will detect, build, and deploy to all nodes within a few minutes.
 
 ### Monitoring GitOps
 
 ```bash
-# Check recent deploy activity
-ssh admin@node1.local "journalctl -u auto-deploy -n 20"
+# Check recent deploy activity (only node1 has logs)
+ssh admin@node1.local "journalctl -u auto-deploy -n 50"
 
-# Check current deployed revision
-ssh admin@node1.local "cat /var/lib/auto-deploy/revision"
+# Watch deployment in real-time
+ssh admin@node1.local "journalctl -u auto-deploy -f"
 
-# Check timer status
+# Check current deployed revision on all nodes
+for i in 1 2 3 4 5 6 7; do
+  echo -n "node$i: "
+  ssh admin@node$i.local "cat /var/lib/auto-deploy/revision"
+done
+
+# Check timer status (only on node1)
 ssh admin@node1.local "systemctl status auto-deploy.timer"
 
-# Manually trigger deploy (if needed)
+# Manually trigger deploy
 ssh admin@node1.local "sudo systemctl start auto-deploy"
 ```
 
 ### Key Files
 
-- `gitops.nix` - Auto-deploy service and timer configuration
-- `/var/lib/auto-deploy/revision` - Stored revision on each node
+- `gitops.nix` - Auto-deploy service (node1 builds/pushes, nodes 2-7 receive only)
+- `/var/lib/auto-deploy/revision` - Deployed revision on each node
 
 ### Troubleshooting GitOps
 
 If auto-deploy fails:
 ```bash
-# Check logs for errors
-ssh admin@node1.local "journalctl -u auto-deploy -n 50"
+# Check logs for errors (only node1 has deployment logs)
+ssh admin@node1.local "journalctl -u auto-deploy -n 100"
 
 # Common issues:
-# - GitHub SSH access: check /root/.ssh/id_ed25519 exists
-# - Network: ensure node can reach github.com
-# - Disk space: run nix-collect-garbage -d
+# - GitHub SSH access: check /root/.ssh/id_ed25519 exists on node1
+# - Network: ensure node1 can reach github.com and all other nodes
+# - Disk space on node1: run nix-collect-garbage -d
+# - SSH to other nodes: test with `ssh root@node2.local echo OK`
+```
+
+### Manual Deployment Fallback
+
+If node1 is down, deploy manually from desktop:
+```bash
+# Build and deploy to each node individually
+for i in 1 2 3 4 5 6 7; do
+  ssh admin@node$i.local "sudo nixos-rebuild switch --flake 'git+ssh://git@github.com/SamuelSchlesinger/odroid-c4-cluster#node$i'" &
+done
+wait
 ```
 
 ## Kubernetes (K3s)
@@ -269,7 +312,7 @@ scp -J samuel@desktop admin@node1.local:/etc/rancher/k3s/k3s.yaml ~/.kube/config
 | `configuration.nix` | Base system settings (users, packages) | Often |
 | `k3s.nix` | K3s Kubernetes cluster configuration | Rarely |
 | `monitoring.nix` | Prometheus + Grafana for node1 | Rarely |
-| `gitops.nix` | Auto-deploy service (15s polling) | Rarely |
+| `gitops.nix` | Centralized GitOps (node1 builds/deploys to all) | Rarely |
 | `flake.nix` | Node definitions, build outputs | Rarely |
 | `flake.lock` | Pinned nixpkgs version | Only when updating packages |
 | `hardware-configuration.nix` | Boot/hardware settings | Rarely |
@@ -287,7 +330,7 @@ scp -J samuel@desktop admin@node1.local:/etc/rancher/k3s/k3s.yaml ~/.kube/config
    ```bash
    git add -A && git commit -m "Description" && git push
    ```
-3. **GitOps handles deployment automatically** - all nodes will detect and deploy within ~20 seconds
+3. **GitOps handles deployment automatically** - node1 will build and deploy to all nodes
 
 To monitor the rollout:
 ```bash
@@ -296,16 +339,13 @@ ssh -J samuel@desktop admin@node1.local "journalctl -u auto-deploy -f"
 
 ### Manual Deployment (if GitOps fails)
 
-Normally GitOps handles deployment automatically. If you need to deploy manually:
+Normally GitOps handles deployment automatically via node1. If you need to deploy manually:
 
 ```bash
-# Trigger GitOps on all nodes
-for i in 1 2 3 4 5 6 7; do
-  ssh -J samuel@desktop admin@node$i.local "sudo systemctl start auto-deploy" &
-done
-wait
+# Trigger GitOps on node1 (it will deploy to all nodes)
+ssh -J samuel@desktop admin@node1.local "sudo systemctl start auto-deploy"
 
-# Or bypass GitOps entirely (emergency)
+# Or bypass GitOps entirely (emergency - deploy each node independently)
 for i in 1 2 3 4 5 6 7; do
   ssh -J samuel@desktop admin@node$i.local "sudo nixos-rebuild switch --flake 'git+ssh://git@github.com/SamuelSchlesinger/odroid-c4-cluster#node$i'" &
 done
@@ -415,39 +455,19 @@ cd ~/sysadmin/odroid-c4
 nix build .#node1-sdImage
 ```
 
-## Distributed Builds
+## Centralized Build Architecture
 
-The cluster uses Nix distributed builds to share capacity across all 7 nodes (28 cores total). When you build on any node, Nix can offload work to other nodes automatically.
+The cluster uses a centralized build model where **node1 is the sole builder**. This replaces the previous distributed builds setup.
 
-**How it works** (see `configuration.nix:99-112`):
-1. `nix.distributedBuilds = true` enables the feature
-2. `nix.buildMachines` lists all 7 nodes with their specs
-3. Root SSH keys allow nix-daemon to connect between nodes
-4. A shared signing key ensures nodes trust each other's builds
-
-**Key configuration in configuration.nix**:
-```nix
-nix.distributedBuilds = true;
-nix.buildMachines = [
-  { hostName = "node1.local"; sshUser = "root"; sshKey = "/root/.ssh/id_ed25519";
-    system = "aarch64-linux"; maxJobs = 4; ... }
-  # ... all 7 nodes
-];
-```
-
-**Using distributed builds**:
-```bash
-# Normal build - uses local + remote nodes
-nix build nixpkgs#hello
-
-# Force remote-only
-nix build nixpkgs#hello --max-jobs 0
-```
-
-**Important**: Nodes don't share stores automatically. Each has its own `/nix/store`. Most packages come from cache.nixos.org; distributed builds help with custom derivations.
+**How it works**:
+1. node1 polls GitHub for changes every 15 seconds
+2. When changes are detected, node1 builds all 7 NixOS configurations
+3. node1 uses `nix copy` to push builds to nodes 2-7 via SSH
+4. node1 activates the new configuration on all nodes
+5. Binary cache signing ensures nodes trust builds from node1
 
 **Key files on each node**:
-- `/root/.ssh/id_ed25519` - Root SSH key for inter-node access
+- `/root/.ssh/id_ed25519` - Root SSH key (node1 uses this to push to other nodes)
 - `/etc/nix/cache-priv-key.pem` - Signing key for builds
 
 **Re-setup if needed**:
@@ -462,8 +482,8 @@ nix build nixpkgs#hello --max-jobs 0
 - `~/.ssh/odroid-cluster/cache/` - Binary cache signing keys
 
 **The root key (`root@odroid-cluster`) serves two purposes:**
-1. Inter-node SSH for distributed builds (nodes can SSH to each other as root)
-2. GitHub deploy key for pulling the private repo directly on nodes
+1. Inter-node SSH for centralized deployments (node1 pushes to all other nodes as root)
+2. GitHub deploy key for pulling the private repo directly on node1
 
 **Security note:** The cluster root key is NOT authorized on the desktop or MacBook - nodes cannot SSH back to those machines.
 

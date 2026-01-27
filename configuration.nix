@@ -46,7 +46,7 @@
   services.openssh = {
     enable = true;
     settings = {
-      # Allow root login with SSH keys only (required for Nix distributed builds)
+      # Allow root login with SSH keys only (required for centralized GitOps)
       PermitRootLogin = "prohibit-password";
       PasswordAuthentication = false;
     };
@@ -84,7 +84,7 @@
     kubectl     # Kubernetes CLI
   ];
 
-  # Enable flakes and distributed builds
+  # Enable flakes and nix settings
   nix = {
     settings = {
       experimental-features = [ "nix-command" "flakes" ];
@@ -95,25 +95,12 @@
         "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
         "odroid-cluster:h/8zXapPMFf2htwIuN5Pgu5e59wubGIJjbAeO+5GPK8="
       ];
-      # Sign builds with cluster key (for distributed builds)
+      # Sign builds with cluster key (for nix copy between nodes)
       secret-key-files = "/etc/nix/cache-priv-key.pem";
       # Explicitly disable post-build-hook (clear any previous setting)
       post-build-hook = "";
     };
 
-    # Enable distributed builds across the cluster
-    distributedBuilds = true;
-
-    # All cluster nodes as build machines (4 cores each)
-    buildMachines = [
-      { hostName = "node1.local"; sshUser = "root"; sshKey = "/root/.ssh/id_ed25519"; system = "aarch64-linux"; maxJobs = 4; speedFactor = 1; supportedFeatures = [ "nixos-test" "big-parallel" ]; }
-      { hostName = "node2.local"; sshUser = "root"; sshKey = "/root/.ssh/id_ed25519"; system = "aarch64-linux"; maxJobs = 4; speedFactor = 1; supportedFeatures = [ "nixos-test" "big-parallel" ]; }
-      { hostName = "node3.local"; sshUser = "root"; sshKey = "/root/.ssh/id_ed25519"; system = "aarch64-linux"; maxJobs = 4; speedFactor = 1; supportedFeatures = [ "nixos-test" "big-parallel" ]; }
-      { hostName = "node4.local"; sshUser = "root"; sshKey = "/root/.ssh/id_ed25519"; system = "aarch64-linux"; maxJobs = 4; speedFactor = 1; supportedFeatures = [ "nixos-test" "big-parallel" ]; }
-      { hostName = "node5.local"; sshUser = "root"; sshKey = "/root/.ssh/id_ed25519"; system = "aarch64-linux"; maxJobs = 4; speedFactor = 1; supportedFeatures = [ "nixos-test" "big-parallel" ]; }
-      { hostName = "node6.local"; sshUser = "root"; sshKey = "/root/.ssh/id_ed25519"; system = "aarch64-linux"; maxJobs = 4; speedFactor = 1; supportedFeatures = [ "nixos-test" "big-parallel" ]; }
-      { hostName = "node7.local"; sshUser = "root"; sshKey = "/root/.ssh/id_ed25519"; system = "aarch64-linux"; maxJobs = 4; speedFactor = 1; supportedFeatures = [ "nixos-test" "big-parallel" ]; }
-    ];
   };
 
   # Automatic garbage collection
@@ -123,9 +110,9 @@
     options = "--delete-older-than 30d";
   };
 
-  # Enable root SSH for distributed builds (key-based only)
+  # Enable root SSH for centralized deployments (key-based only)
   users.users.root.openssh.authorizedKeys.keys = [
-    # Cluster root key for distributed builds
+    # Cluster root key for centralized GitOps deployments
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBNJtdWB67MZTwLn8dyyyPV4pvQAWpfUeZ3TwKLjCnXw root@odroid-cluster"
   ];
 }
