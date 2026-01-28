@@ -31,7 +31,7 @@ in
       # node1 is the seed peer for the cluster
       # Other nodes connect to node1, which acts as the hub
       seedPeers = lib.mkIf (!isNode1) [
-        "192.168.4.250:8333"  # node1
+        "node1.local:8333"
       ];
     };
 
