@@ -64,8 +64,10 @@ let
 
     for node in ${lib.concatStringsSep " " allNodes}; do
       log "Building $node..."
+      # Use --builders '' to build locally - distributed builds cause outputs to stay on remote
+      # machines, breaking nix copy. Build locally, then push to all nodes.
       if PATH_OUT=$(${pkgs.nix}/bin/nix build "$FLAKE_URL#nixosConfigurations.$node.config.system.build.toplevel" \
-          --no-link --print-out-paths --refresh 2>&1); then
+          --no-link --print-out-paths --refresh --builders "" 2>&1); then
         PATHS[$node]="$PATH_OUT"
         log "Built $node: $PATH_OUT"
       else
