@@ -10,6 +10,9 @@ let
   # Toggle to enable/disable pqcoin mining
   # Set to false to speed up builds (pqcoin Rust compilation is slow)
   enablePqcoin = true;
+
+  hostname = config.networking.hostName;
+  isNode1 = hostname == "node1";
 in
 {
   services.pqcoin = {
@@ -25,10 +28,10 @@ in
 
     p2p = {
       port = 8333;
-      # Seed peers: desktop and MacBook on Tailscale
-      seedPeers = [
-        "100.123.199.53:8333"   # desktop
-        "100.120.248.123:8333"  # MacBook
+      # node1 is the seed peer for the cluster
+      # Other nodes connect to node1, which acts as the hub
+      seedPeers = lib.mkIf (!isNode1) [
+        "192.168.4.250:8333"  # node1
       ];
     };
 
