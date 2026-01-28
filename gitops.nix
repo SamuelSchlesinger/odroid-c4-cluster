@@ -206,8 +206,8 @@ in
     wantedBy = [ "timers.target" ];
 
     timerConfig = {
-      OnBootSec = "30s";            # First run 30 seconds after boot
-      OnUnitActiveSec = "15s";      # Then every 15 seconds
+      OnBootSec = "1min";           # First run 1 minute after boot
+      OnUnitActiveSec = "15min";    # Then every 15 minutes
       Persistent = true;            # Run immediately if missed
     };
   };
