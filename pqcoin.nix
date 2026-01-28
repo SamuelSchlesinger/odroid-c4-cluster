@@ -30,7 +30,8 @@ in
       port = 8333;
       # node1 is the seed peer for the cluster
       # Other nodes connect to node1, which acts as the hub
-      seedPeers = if isNode1 then [] else [ "node1.local:8333" ];
+      # Note: pqcoin requires IP address, not hostname
+      seedPeers = if isNode1 then [] else [ "192.168.4.250:8333" ];
     };
 
     logLevel = "info";
