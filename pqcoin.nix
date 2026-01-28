@@ -15,9 +15,9 @@ let
   isNode1 = hostname == "node1";
 in
 {
-  services.pqcoin.instances.testnet = {
+  services.pqcoin = {
     enable = enablePqcoin;
-    network = "testnet";
+    testnet = true;
     mine = true;
 
     rpc = {
@@ -30,9 +30,7 @@ in
       port = 8333;
       # node1 is the seed peer for the cluster
       # Other nodes connect to node1, which acts as the hub
-      seedPeers = lib.mkIf (!isNode1) [
-        "node1.local:8333"
-      ];
+      seedPeers = if isNode1 then [] else [ "node1.local:8333" ];
     };
 
     logLevel = "info";

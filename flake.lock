@@ -42,11 +42,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1769581761,
-        "narHash": "sha256-m21T5DtIPUW1+clgI/7rqKU09lbA+uPOxlRlXbsUzac=",
+        "lastModified": 1769424382,
+        "narHash": "sha256-VdmJJRq4WOutYRQDE/WtcaltSDUe18bJthChGoyTtqk=",
         "owner": "SamuelSchlesinger",
         "repo": "pqcoin",
-        "rev": "dfbddab9dd555d2adea73e4d89d678bb473864c6",
+        "rev": "bfd40f5f707fc2d161dab8c01ceac5b443011b2a",
         "type": "github"
       },
       "original": {
