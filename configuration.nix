@@ -1,5 +1,22 @@
 { config, pkgs, lib, ... }:
 
+let
+  hostname = config.networking.hostName;
+
+  # All build machines in the cluster
+  allBuildMachines = [
+    { hostName = "node1.local"; sshUser = "root"; sshKey = "/root/.ssh/id_ed25519"; system = "aarch64-linux"; maxJobs = 4; speedFactor = 1; supportedFeatures = [ "nixos-test" "big-parallel" ]; }
+    { hostName = "node2.local"; sshUser = "root"; sshKey = "/root/.ssh/id_ed25519"; system = "aarch64-linux"; maxJobs = 4; speedFactor = 1; supportedFeatures = [ "nixos-test" "big-parallel" ]; }
+    { hostName = "node3.local"; sshUser = "root"; sshKey = "/root/.ssh/id_ed25519"; system = "aarch64-linux"; maxJobs = 4; speedFactor = 1; supportedFeatures = [ "nixos-test" "big-parallel" ]; }
+    { hostName = "node4.local"; sshUser = "root"; sshKey = "/root/.ssh/id_ed25519"; system = "aarch64-linux"; maxJobs = 4; speedFactor = 1; supportedFeatures = [ "nixos-test" "big-parallel" ]; }
+    { hostName = "node5.local"; sshUser = "root"; sshKey = "/root/.ssh/id_ed25519"; system = "aarch64-linux"; maxJobs = 4; speedFactor = 1; supportedFeatures = [ "nixos-test" "big-parallel" ]; }
+    { hostName = "node6.local"; sshUser = "root"; sshKey = "/root/.ssh/id_ed25519"; system = "aarch64-linux"; maxJobs = 4; speedFactor = 1; supportedFeatures = [ "nixos-test" "big-parallel" ]; }
+    { hostName = "node7.local"; sshUser = "root"; sshKey = "/root/.ssh/id_ed25519"; system = "aarch64-linux"; maxJobs = 4; speedFactor = 1; supportedFeatures = [ "nixos-test" "big-parallel" ]; }
+  ];
+
+  # Exclude the current node from its own builder list to avoid self-referential builds
+  buildMachines = builtins.filter (m: m.hostName != "${hostname}.local") allBuildMachines;
+in
 {
   # System basics
   system.stateVersion = "24.11";
@@ -52,6 +69,13 @@
     };
   };
 
+  # SSH client config for distributed builds - keepalives prevent stalls
+  programs.ssh.extraConfig = ''
+    Host *.local
+      ServerAliveInterval 30
+      ServerAliveCountMax 3
+  '';
+
   # mDNS for hostname.local discovery
   services.avahi = {
     enable = true;
@@ -97,20 +121,17 @@
       ];
       # Sign builds with cluster key (for nix copy between nodes)
       secret-key-files = "/etc/nix/cache-priv-key.pem";
+
+      # Resilience settings for distributed builds (mitigate Nix bug #5701)
+      builders-use-substitutes = true;  # Let builders fetch from cache directly
+      connect-timeout = 10;              # Fail fast on unreachable nodes
+      fallback = true;                   # Fall back to local build if remote fails
     };
 
     # Distributed builds: node1 can use all nodes to build faster
-    # Safe now that only node1 builds (centralized GitOps)
+    # Each node excludes itself from the builder list (see buildMachines variable above)
     distributedBuilds = true;
-    buildMachines = [
-      { hostName = "node1.local"; sshUser = "root"; sshKey = "/root/.ssh/id_ed25519"; system = "aarch64-linux"; maxJobs = 4; speedFactor = 1; supportedFeatures = [ "nixos-test" "big-parallel" ]; }
-      { hostName = "node2.local"; sshUser = "root"; sshKey = "/root/.ssh/id_ed25519"; system = "aarch64-linux"; maxJobs = 4; speedFactor = 1; supportedFeatures = [ "nixos-test" "big-parallel" ]; }
-      { hostName = "node3.local"; sshUser = "root"; sshKey = "/root/.ssh/id_ed25519"; system = "aarch64-linux"; maxJobs = 4; speedFactor = 1; supportedFeatures = [ "nixos-test" "big-parallel" ]; }
-      { hostName = "node4.local"; sshUser = "root"; sshKey = "/root/.ssh/id_ed25519"; system = "aarch64-linux"; maxJobs = 4; speedFactor = 1; supportedFeatures = [ "nixos-test" "big-parallel" ]; }
-      { hostName = "node5.local"; sshUser = "root"; sshKey = "/root/.ssh/id_ed25519"; system = "aarch64-linux"; maxJobs = 4; speedFactor = 1; supportedFeatures = [ "nixos-test" "big-parallel" ]; }
-      { hostName = "node6.local"; sshUser = "root"; sshKey = "/root/.ssh/id_ed25519"; system = "aarch64-linux"; maxJobs = 4; speedFactor = 1; supportedFeatures = [ "nixos-test" "big-parallel" ]; }
-      { hostName = "node7.local"; sshUser = "root"; sshKey = "/root/.ssh/id_ed25519"; system = "aarch64-linux"; maxJobs = 4; speedFactor = 1; supportedFeatures = [ "nixos-test" "big-parallel" ]; }
-    ];
+    inherit buildMachines;
   };
 
   # Automatic garbage collection
