@@ -15,9 +15,9 @@ let
   isNode1 = hostname == "node1";
 in
 {
-  services.pqcoin = {
+  services.pqcoin.instances.testnet = {
     enable = enablePqcoin;
-    testnet = true;
+    network = "testnet";
     mine = true;
 
     rpc = {
