@@ -62,12 +62,14 @@ let
     declare -A PATHS
     BUILD_FAILED=0
 
+    # Force local builds - distributed builds cause outputs to stay on remote machines,
+    # breaking nix copy. Use empty builders list.
+    NO_BUILDERS=""
+
     for node in ${lib.concatStringsSep " " allNodes}; do
       log "Building $node..."
-      # Use --max-jobs 0 with no builders to force local builds - distributed builds cause
-      # outputs to stay on remote machines, breaking nix copy.
       if PATH_OUT=$(${pkgs.nix}/bin/nix build "$FLAKE_URL#nixosConfigurations.$node.config.system.build.toplevel" \
-          --no-link --print-out-paths --refresh --builders '''' 2>&1); then
+          --no-link --print-out-paths --refresh --builders "$NO_BUILDERS" 2>&1); then
         PATHS[$node]="$PATH_OUT"
         log "Built $node: $PATH_OUT"
       else
