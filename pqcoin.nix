@@ -6,9 +6,14 @@
 
 { config, lib, ... }:
 
+let
+  # Toggle to enable/disable pqcoin mining
+  # Set to false to speed up builds (pqcoin Rust compilation is slow)
+  enablePqcoin = false;
+in
 {
   services.pqcoin = {
-    enable = true;
+    enable = enablePqcoin;
     testnet = true;
     mine = true;
 
